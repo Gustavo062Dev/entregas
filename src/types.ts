@@ -57,17 +57,25 @@ export interface AppState {
   users: AppUser[];
 }
 export interface AppActions {
-  assignDelivery: (deliveryId: string, driverId: string | null) => void;
-  startRoute: (deliveryId: string, driverId: string) => void;
-  advanceRoute: (deliveryId: string) => void;
-  completeDelivery: (deliveryId: string, receivedBy: string) => void;
-  setDriverAvailability: (driverId: string, online: boolean) => void;
-  saveUser: (user: AppUser) => boolean;
-  toggleUser: (id: string) => void;
-  resetDemo: () => void;
+  assignDelivery: (deliveryId: string, driverId: string | null) => boolean | Promise<boolean>;
+  startRoute: (deliveryId: string, driverId: string) => boolean | Promise<boolean>;
+  advanceRoute: (deliveryId: string) => boolean | Promise<boolean>;
+  completeDelivery: (deliveryId: string, receivedBy: string) => boolean | Promise<boolean>;
+  setDriverAvailability: (driverId: string, online: boolean) => boolean | Promise<boolean>;
+  saveUser: (user: AppUser, password?: string) => boolean | Promise<boolean>;
+  toggleUser: (id: string) => boolean | Promise<boolean>;
+  resetDemo: () => boolean | Promise<boolean>;
   notify: (message: string) => void;
 }
-export interface ScreenProps { state: AppState; actions: AppActions }
+export interface ConnectedAccess {
+  user: AppUser;
+  signOut: () => void | Promise<void>;
+  syncing: boolean;
+  error: string;
+  refresh: () => void | Promise<void>;
+  simulation: boolean;
+}
+export interface ScreenProps { state: AppState; actions: AppActions; access?: ConnectedAccess }
 export const deliveryStatusLabel: Record<DeliveryStatus, string> = {
   pending: 'Pendente', in_transit: 'Em rota', delivered: 'Entregue',
 };

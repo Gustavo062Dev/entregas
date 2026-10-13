@@ -1,0 +1,59 @@
+.rota-login { min-height: 100vh; min-height: 100dvh; padding: max(32px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(32px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left)); display: grid; place-items: center; background: #f4f6f2; color: #20312b; }
+.rota-login-shell { width: min(100%, 1050px); display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; border: 1px solid #e3e8df; border-radius: 26px; background: #fff; box-shadow: 0 16px 70px #1b38200b; }
+.rota-login-intro { min-width: 0; padding: 42px; display: flex; flex-direction: column; background: #e9f1dd; }
+.rota-login-brand { display: flex; align-items: center; gap: 11px; }
+.rota-login-brand > span { width: 43px; height: 43px; display: grid; place-items: center; background: #20382d; color: #d9f56a; border-radius: 13px; }
+.rota-login-brand strong { font-family: 'Manrope Variable', 'Manrope', sans-serif; font-size: 32px; font-weight: 800; letter-spacing: -1.8px; }
+.rota-login-brand strong > span { color: #638b40; }
+.rota-login-intro-content { margin: 73px 0 60px; }
+.rota-login-eyebrow { font-size: 10px; font-weight: 800; letter-spacing: 1.7px; color: #638057; }
+.rota-login-intro h2 { font-family: 'Manrope Variable', 'Manrope', sans-serif; font-weight: 800; font-size: clamp(28px, 3.3vw, 38px); line-height: 1.23; letter-spacing: -1.2px; margin: 15px 0 18px; max-width: 350px; }
+.rota-login-intro p { max-width: 345px; font-size: 14px; line-height: 1.7; color: #627361; margin: 0; }
+.rota-login-journey { margin-top: 42px; display: flex; align-items: center; max-width: 280px; }
+.rota-login-journey-point { width: 54px; height: 54px; border-radius: 17px; background: #fff9; display: grid; place-items: center; color: #49623d; border: 1px solid #dce6d1; }
+.rota-login-journey-destination { background: #d9f56a; color: #2b4321; border-color: #c8e45b; }
+.rota-login-journey-path { flex: 1; border-top: 2px dashed #b6c6a6; margin: 0 10px; }
+.rota-login-intro-footer { margin-top: auto; color: #738569; font-size: 11px; }
+.rota-login-panel { min-width: 0; padding: 60px 48px; display: flex; flex-direction: column; justify-content: center; }
+.rota-login-access { display: inline-flex; align-items: center; gap: 6px; color: #6a7c65; font-size: 9px; font-weight: 800; letter-spacing: 1px; }
+.rota-login-form-heading h1 { font-family: 'Manrope Variable', 'Manrope', sans-serif; font-size: 27px; letter-spacing: -.9px; font-weight: 800; line-height: 1.3; margin: 17px 0 10px; }
+.rota-login-form-heading > p { margin: 0; color: #7b837c; font-size: 13px; line-height: 1.6; }
+.rota-login-form { display: flex; flex-direction: column; gap: 19px; margin-top: 30px; }
+.rota-login-field { min-width: 0; }
+.rota-login-field > label { display: block; font-size: 12px; font-weight: 700; margin-bottom: 8px; }
+.rota-login-field input { display: block; width: 100%; min-width: 0; height: 48px; border: 1px solid #dfe5dc; border-radius: 10px; background: #fcfdfb; color: #20312b; padding: 0 13px; font-size: 14px; }
+.rota-login-field input::placeholder { color: #969e96; }
+.rota-login-field input:disabled { opacity: .7; }
+.rota-login-field input:focus-visible { outline: 2px solid #8bad66; outline-offset: 2px; }
+.rota-login-field-help { margin: 8px 0 0; color: #7b837c; font-size: 11px; line-height: 1.6; }
+.rota-login-password { position: relative; }
+.rota-login-password input { padding-right: 49px; }
+.rota-login-password button { position: absolute; right: 4px; top: 4px; width: 40px; height: 40px; display: grid; place-items: center; background: transparent; border: 0; border-radius: 7px; color: #809079; }
+.rota-login-password button:hover { background: #edf2e8; }
+.rota-login-submit { width: 100%; min-height: 49px; margin-top: 4px; display: flex; align-items: center; justify-content: space-between; gap: 10px; background: #d9f56a; color: #24341a; border: 1px solid #cee857; border-radius: 10px; padding: 13px 16px; font-size: 13px; font-weight: 800; }
+.rota-login-submit:hover:not(:disabled) { background: #d0ee58; }
+.rota-login-submit:disabled { opacity: .65; }
+.rota-login-error { padding: 11px 13px; background: #fff1ec; border: 1px solid #f2d8ce; border-radius: 10px; color: #a3452b; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.rota-login-help { display: flex; align-items: flex-start; gap: 9px; margin-top: 24px; color: #87917f; }
+.rota-login-help > svg { margin-top: 2px; }
+.rota-login-help p { font-size: 11px; line-height: 1.7; margin: 0; }
+.rota-login-spinner { width: 18px; height: 18px; border: 2px solid #24341a33; border-top-color: #24341a; border-radius: 50%; animation: rota-login-spin .7s linear infinite; }
+@keyframes rota-login-spin { to { transform: rotate(360deg); } }
+@media (max-width: 800px) {
+  .rota-login-intro { padding: 32px; }
+  .rota-login-panel { padding: 45px 30px; }
+}
+@media (max-width: 620px) {
+  .rota-login { padding: max(20px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); align-items: start; }
+  .rota-login-shell { max-width: 430px; grid-template-columns: minmax(0, 1fr); border-radius: 20px; }
+  .rota-login-intro { padding: 24px 25px; }
+  .rota-login-brand > span { width: 37px; height: 37px; border-radius: 11px; }
+  .rota-login-brand strong { font-size: 28px; }
+  .rota-login-intro-content { margin: 21px 0 0; }
+  .rota-login-eyebrow, .rota-login-journey, .rota-login-intro-footer, .rota-login-intro-content > p { display: none; }
+  .rota-login-intro h2 { font-size: 21px; letter-spacing: -.6px; margin: 0; max-width: 300px; }
+  .rota-login-panel { padding: 29px 25px 31px; }
+  .rota-login-form-heading h1 { font-size: 24px; margin-top: 12px; }
+  .rota-login-form { margin-top: 25px; }
+  .rota-login-field input { font-size: 16px; }
+}

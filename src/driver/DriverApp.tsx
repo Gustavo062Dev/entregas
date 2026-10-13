@@ -1,8 +1,8 @@
 import { Capacitor } from '@capacitor/core';
 import {
   ArrowDownRight, ArrowRight, ArrowUpRight, Check, CheckCheck, ChevronDown,
-  ChevronRight, Clock3, Gauge, History, MapPin, Navigation, Package, Phone,
-  Power, Route, ShieldCheck, Truck, UserRound, X,
+  ChevronRight, Clock3, Gauge, History, LogOut, Mail, MapPin, Navigation, Package, Phone,
+  Power, RefreshCw, Route, ShieldCheck, Truck, UserRound, X,
 } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import MapCanvas from '../components/MapCanvas';
@@ -52,24 +52,35 @@ function Sheet({ title, children, onClose }: { title: string; children: ReactNod
   );
 }
 
-export default function DriverApp({ state, actions }: ScreenProps) {
+export default function DriverApp({ state, actions, access }: ScreenProps) {
   const [driverId, setDriverId] = useState(() => readDriver() ?? state.drivers[0]?.id ?? '');
   const [tab, setTab] = useState<DriverTab>('route');
   const [chooseDriver, setChooseDriver] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [receivedBy, setReceivedBy] = useState('');
   const [deliveryFilter, setDeliveryFilter] = useState<'pending' | 'delivered'>('pending');
-  const driver = state.drivers.find(item => item.id === driverId) ?? state.drivers[0];
+  const [submitting, setSubmitting] = useState(false);
+  const mutationPending = useRef(false);
+  const driver = access
+    ? state.drivers.find(item => item.id === access.user.driverId)
+    : state.drivers.find(item => item.id === driverId) ?? state.drivers[0];
   const native = Capacitor.isNativePlatform();
+  const busy = submitting || Boolean(access?.syncing) || Boolean(access?.error);
+  const simulation = access?.simulation ?? true;
 
   useEffect(() => {
-    if (!driver) return;
+    if (access || !driver) return;
     try { localStorage.setItem(PROFILE_STORAGE, driver.id); } catch { /* A seleção segue disponível sem armazenamento. */ }
-  }, [driver?.id]);
+  }, [access, driver?.id]);
 
-  if (!driver) return <div className="driver-empty"><Truck size={32} /><h2>Nenhum entregador cadastrado</h2><p>Cadastre um entregador no painel para visualizar o aplicativo.</p>{!native && <a href={screenHref('admin')}>Abrir painel administrativo</a>}</div>;
+  const connectionBanner = access && <div className={`driver-connection-banner ${access.error ? 'error' : ''}`} role={access.error ? 'alert' : 'status'}><RefreshCw size={17} className={access.syncing ? 'driver-sync-icon' : ''} /><div><strong>{access.error ? 'Não foi possível atualizar os dados' : access.syncing ? 'Atualizando suas entregas…' : 'Dados compartilhados'}</strong><p>{access.error || (access.syncing ? 'Aguarde para registrar alterações.' : 'Suas entregas são sincronizadas com o painel.')}</p></div><button type="button" disabled={access.syncing || submitting} onClick={() => void access.refresh()}>{access.error ? 'Tentar novamente' : 'Atualizar'}</button></div>;
 
-  const assigned = state.deliveries.filter(delivery => delivery.driverId === driver.id);
+  if (!driver) return access
+    ? <div className={`driver-page driver-access-empty ${native ? 'driver-native' : ''}`}><div className="driver-access-card"><div className="driver-empty"><Truck size={32} /><h2>Seu acesso precisa de um entregador</h2><p>A conta de {access.user.name} ainda não está vinculada a um entregador disponível. Solicite ao administrador que confira seu cadastro.</p><span className="driver-access-email">{access.user.email}</span></div>{connectionBanner}<button className="driver-secondary" type="button" onClick={() => void access.signOut()}><LogOut size={18} /> Sair</button></div></div>
+    : <div className="driver-empty"><Truck size={32} /><h2>Nenhum entregador cadastrado</h2><p>Cadastre um entregador no painel para visualizar o aplicativo.</p>{!native && <a href={screenHref('admin')}>Abrir painel administrativo</a>}</div>;
+
+  const currentDriverId = driver.id;
+  const assigned = state.deliveries.filter(delivery => delivery.driverId === currentDriverId);
   const pending = assigned.filter(delivery => delivery.status === 'pending');
   const delivered = assigned.filter(delivery => delivery.status === 'delivered');
   const active = assigned.find(delivery => delivery.status === 'in_transit');
@@ -77,7 +88,7 @@ export default function DriverApp({ state, actions }: ScreenProps) {
   const trip = active ? state.trips.find(item => item.deliveryId === active.id && !item.finishedAt) : undefined;
   const driverTrips = state.trips.filter(item => item.driverId === driver.id).sort((a, b) => b.startedAt.localeCompare(a.startedAt));
   const online = driver.status !== 'offline';
-  const userActive = state.users.some(item => item.driverId === driver.id && item.active);
+  const userActive = access ? access.user.active : state.users.some(item => item.driverId === driver.id && item.active);
   const todayCount = delivered.filter(delivery => state.trips.some(item => item.deliveryId === delivery.id && item.date === state.demoDate && item.finishedAt)).length;
   const dayLabel = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'long' }).format(new Date(`${state.demoDate}T12:00:00`));
   const navigationStep = Math.min(3, Math.floor((trip?.progress ?? 0) * 4));
@@ -96,21 +107,39 @@ export default function DriverApp({ state, actions }: ScreenProps) {
     setTab('route');
   }
 
+  async function mutate(action: () => boolean | Promise<boolean>, onSuccess?: () => void) {
+    if (busy || mutationPending.current) return;
+    mutationPending.current = true;
+    setSubmitting(true);
+    try {
+      if (await action()) onSuccess?.();
+    } catch {
+      actions.notify('Não foi possível salvar a alteração. Atualize os dados e tente novamente.');
+    } finally {
+      mutationPending.current = false;
+      setSubmitting(false);
+    }
+  }
+
   function begin(delivery: Delivery) {
-    actions.startRoute(delivery.id, driver.id);
-    setTab('route');
+    void mutate(() => actions.startRoute(delivery.id, currentDriverId), () => setTab('route'));
   }
 
   function openConfirmation(delivery: Delivery) {
+    if (busy) return;
     setReceivedBy('');
     setConfirmId(delivery.id);
   }
 
   function confirmDelivery(event: FormEvent) {
     event.preventDefault();
-    if (!confirmId || !receivedBy.trim()) return;
-    actions.completeDelivery(confirmId, receivedBy.trim());
-    setConfirmId(null);
+    if (!confirmId || !receivedBy.trim() || busy) return;
+    const deliveryId = confirmId;
+    void mutate(() => actions.completeDelivery(deliveryId, receivedBy.trim()), () => setConfirmId(null));
+  }
+
+  function changeAvailability(online: boolean) {
+    void mutate(() => actions.setDriverAvailability(currentDriverId, online));
   }
 
   const routeCard = (delivery: Delivery, compact = false) => (
@@ -120,7 +149,7 @@ export default function DriverApp({ state, actions }: ScreenProps) {
       <div className="driver-address"><MapPin size={18} /><div><strong>{delivery.address}</strong><span>{delivery.neighborhood}</span></div></div>
       <div className="driver-delivery-meta"><span><Clock3 size={14} /> {delivery.window}</span><span><Route size={14} /> {formatKm(delivery.estimatedKm)} km estimados</span></div>
       {delivery.note && <p className="driver-delivery-note">{delivery.note}</p>}
-      {delivery.status === 'pending' && <button className="driver-primary" type="button" disabled={!online || Boolean(active) || !userActive} onClick={() => begin(delivery)}><Navigation size={18} /> Iniciar rota<ArrowRight size={18} /></button>}
+      {delivery.status === 'pending' && <button className="driver-primary" type="button" disabled={busy || !online || Boolean(active) || !userActive} onClick={() => begin(delivery)}><Navigation size={18} /> Iniciar rota<ArrowRight size={18} /></button>}
       {delivery.status === 'in_transit' && compact && <button className="driver-secondary" type="button" onClick={() => setTab('route')}>Ver navegação<ArrowRight size={17} /></button>}
       {delivery.status === 'delivered' && <div className="driver-receipt"><CheckCheck size={16} /> Recebido por {delivery.receivedBy || 'cliente'}</div>}
     </article>
@@ -129,30 +158,31 @@ export default function DriverApp({ state, actions }: ScreenProps) {
   return (
     <div className={`driver-page ${native ? 'driver-native' : ''}`}>
       {!native && <aside className="driver-preview-context">
-        <a className="driver-desktop-brand" href={screenHref('admin')}><Route size={28} /> rota<span>.</span></a>
+        <a className="driver-desktop-brand" href={screenHref(access ? 'driver' : 'admin')}><Route size={28} /> rota<span>.</span></a>
         <span className="driver-preview-label">APLICATIVO DO ENTREGADOR</span>
         <h1>Cada entrega.<br />No caminho certo<span>.</span></h1>
         <p>Sua rota, suas entregas e os quilômetros do dia. Tudo em um só lugar.</p>
         <div className="driver-preview-feature"><span><Navigation size={19} /></span><div><strong>Navegação no aplicativo</strong><small>Interface de orientação integrada</small></div></div>
         <div className="driver-preview-feature"><span><Gauge size={19} /></span><div><strong>Quilômetros organizados</strong><small>Histórico de cada percurso</small></div></div>
         <div className="driver-preview-feature"><span><Package size={19} /></span><div><strong>Entregas em poucos toques</strong><small>Da saída à confirmação</small></div></div>
-        <a className="driver-back-link" href={screenHref('admin')}>Abrir painel administrativo <ArrowUpRight size={17} /></a>
-        <p className="driver-context-note">Prévia das telas para Android.<br />Dados e percursos de demonstração.</p>
+        {!access && <a className="driver-back-link" href={screenHref('admin')}>Abrir painel administrativo <ArrowUpRight size={17} /></a>}
+        <p className="driver-context-note">{access ? <>Conta conectada ao painel.<br />Mapa e quilômetros ainda simulados.</> : <>Prévia das telas para Android.<br />Dados e percursos de demonstração.</>}</p>
       </aside>}
 
       <div className="driver-phone">
         <header className="driver-header">
-          <div className="driver-header-brand"><span><Route size={21} /> rota<span className="driver-brand-dot">.</span></span><span className="driver-demo-chip">Demonstração</span></div>
-          <div className="driver-greeting"><div><span>Olá, {driver.name.split(' ')[0]} <span aria-hidden="true">✦</span></span><h2>Vamos fazer<br />um bom caminho.</h2></div><button className="driver-profile-switch" type="button" onClick={() => setChooseDriver(true)} aria-label={`Trocar entregador. Perfil atual: ${driver.name}`}><span style={{ backgroundColor: driver.color }}>{driver.initials}</span><ChevronDown size={14} /></button></div>
-          <div className="driver-shift"><span className={`driver-shift-dot ${online ? 'online' : ''}`} /><span>{!userActive ? 'Perfil de demonstração desativado' : active ? 'Você está em rota' : online ? 'Seu turno está em andamento' : 'Você está fora do turno'}</span><button type="button" disabled={Boolean(active) || !userActive} onClick={() => actions.setDriverAvailability(driver.id, !online)}>{online ? 'Encerrar' : 'Iniciar turno'}<Power size={13} /></button></div>
+          <div className="driver-header-brand"><span><Route size={21} /> rota<span className="driver-brand-dot">.</span></span><span className="driver-demo-chip">{access ? 'Conta conectada' : 'Demonstração'}</span></div>
+          <div className="driver-greeting"><div><span>Olá, {(access?.user.name ?? driver.name).split(' ')[0]} <span aria-hidden="true">✦</span></span><h2>Vamos fazer<br />um bom caminho.</h2></div><button className="driver-profile-switch" type="button" onClick={() => access ? setTab('profile') : setChooseDriver(true)} aria-label={access ? 'Abrir meu perfil' : `Trocar entregador. Perfil atual: ${driver.name}`}><span style={{ backgroundColor: driver.color }}>{driver.initials}</span>{!access && <ChevronDown size={14} />}</button></div>
+          <div className="driver-shift"><span className={`driver-shift-dot ${online ? 'online' : ''}`} /><span>{!userActive ? (access ? 'Perfil desativado' : 'Perfil de demonstração desativado') : active ? 'Você está em rota' : online ? 'Seu turno está em andamento' : 'Você está fora do turno'}</span><button type="button" disabled={busy || Boolean(active) || !userActive} onClick={() => changeAvailability(!online)}>{online ? 'Encerrar' : 'Iniciar turno'}<Power size={13} /></button></div>
         </header>
 
         <main className="driver-main">
+          {connectionBanner}
           {tab === 'route' && <>
             <div className="driver-section-title"><h2>Minha rota</h2><span>{dayLabel}</span></div>
             <div className="driver-stats"><article><span className="driver-stat-icon"><Route size={20} /></span><div><strong>{formatKm(driver.kmToday)}<small> km</small></strong><span>Rodados hoje · simulação</span></div></article><article><span className="driver-stat-icon"><Package size={20} /></span><div><strong>{todayCount}<small> / {assigned.length}</small></strong><span>Entregas concluídas</span></div></article></div>
 
-            {!userActive ? <div className="driver-offline-banner"><ShieldCheck size={18} /><div><strong>Perfil desativado</strong><p>Um administrador precisa reativar este perfil no painel.</p></div></div> : !online && <div className="driver-offline-banner"><Power size={18} /><div><strong>Pronto para começar?</strong><p>Inicie o turno para iniciar uma rota.</p></div><button type="button" onClick={() => actions.setDriverAvailability(driver.id, true)}>Iniciar</button></div>}
+            {!userActive ? <div className="driver-offline-banner"><ShieldCheck size={18} /><div><strong>Perfil desativado</strong><p>Um administrador precisa reativar este perfil no painel.</p></div></div> : !online && <div className="driver-offline-banner"><Power size={18} /><div><strong>Pronto para começar?</strong><p>Inicie o turno para iniciar uma rota.</p></div><button type="button" disabled={busy} onClick={() => changeAvailability(true)}>Iniciar</button></div>}
 
             {active ? <>
               <div className="driver-section-title small"><h3>Navegação</h3><span className="driver-live-label"><span /> Simulação</span></div>
@@ -161,7 +191,7 @@ export default function DriverApp({ state, actions }: ScreenProps) {
                 <div className="driver-active-map"><MapCanvas drivers={[driver]} deliveries={[active]} selectedDriverId={driver.id} activeDeliveryId={active.id} compact /></div>
                 <div className="driver-route-progress"><div><span>{formatKm(trip?.km ?? 0)} km simulados</span><strong>{Math.round((trip?.progress ?? 0) * 100)}%</strong></div><progress value={trip?.progress ?? 0} max={1} aria-label="Progresso do percurso simulado" /></div>
                 <div className="driver-navigation-footer"><span><Package size={17} /><strong>{active.customer}</strong></span><span>{active.code}</span></div>
-                {(trip?.progress ?? 0) < 1 ? <button className="driver-primary" type="button" disabled={!userActive} onClick={() => actions.advanceRoute(active.id)}>Avançar simulação<ArrowRight size={18} /></button> : <button className="driver-primary" type="button" disabled={!userActive} onClick={() => openConfirmation(active)}><Check size={18} /> Confirmar entrega<ArrowRight size={18} /></button>}
+                {(trip?.progress ?? 0) < 1 ? (simulation ? <button className="driver-primary" type="button" disabled={busy || !userActive} onClick={() => void mutate(() => actions.advanceRoute(active.id))}>Avançar simulação<ArrowRight size={18} /></button> : <p className="driver-gps-pending"><Navigation size={17} /> A captura por GPS e a navegação real serão conectadas na próxima etapa.</p>) : <button className="driver-primary" type="button" disabled={busy || !userActive} onClick={() => openConfirmation(active)}><Check size={18} /> Confirmar entrega<ArrowRight size={18} /></button>}
                 <p className="driver-map-disclaimer">Mapa ilustrativo. Esta prévia não usa GPS nem fornece orientação de trânsito real.</p>
               </div>
               {pending.length > 0 && <div className="driver-up-next"><span className="driver-next-icon"><Package size={18} /></span><div><small>Depois desta entrega</small><strong>{pending[0].customer}</strong><span>{pending[0].neighborhood}</span></div><span>+{pending.length}</span></div>}
@@ -197,14 +227,15 @@ export default function DriverApp({ state, actions }: ScreenProps) {
 
           {tab === 'profile' && <>
             <div className="driver-section-title"><h2>Meu perfil</h2><UserRound size={20} /></div>
-            <div className="driver-profile-card"><span className="driver-large-avatar" style={{ backgroundColor: driver.color }}>{driver.initials}</span><h3>{driver.name}</h3><span className={`driver-profile-status ${online ? 'online' : ''}`}><span />{!userActive ? 'Perfil desativado' : active ? 'Em rota' : online ? 'Disponível para entregas' : 'Fora do turno'}</span></div>
+            <div className="driver-profile-card"><span className="driver-large-avatar" style={{ backgroundColor: driver.color }}>{driver.initials}</span><h3>{access?.user.name ?? driver.name}</h3>{access && <p className="driver-profile-email"><Mail size={14} /> {access.user.email}</p>}<span className={`driver-profile-status ${online ? 'online' : ''}`}><span />{!userActive ? 'Perfil desativado' : active ? 'Em rota' : online ? 'Disponível para entregas' : 'Fora do turno'}</span></div>
             <div className="driver-profile-details"><div><span><Truck size={19} /> Veículo</span><strong>{driver.vehicle}</strong></div><div><span><Phone size={19} /> Telefone</span><strong>{driver.phone}</strong></div><div><span><Package size={19} /> Entregas atribuídas</span><strong>{assigned.length}</strong></div></div>
-            <button className="driver-secondary" type="button" onClick={() => setChooseDriver(true)}><UserRound size={18} /> Trocar entregador de demonstração<ChevronRight size={18} /></button>
-            <button className="driver-shift-button" type="button" disabled={Boolean(active) || !userActive} onClick={() => actions.setDriverAvailability(driver.id, !online)}><Power size={18} />{online ? 'Encerrar meu turno' : 'Iniciar meu turno'}</button>
+            {!access && <button className="driver-secondary" type="button" onClick={() => setChooseDriver(true)}><UserRound size={18} /> Trocar entregador de demonstração<ChevronRight size={18} /></button>}
+            <button className="driver-shift-button" type="button" disabled={busy || Boolean(active) || !userActive} onClick={() => changeAvailability(!online)}><Power size={18} />{online ? 'Encerrar meu turno' : 'Iniciar meu turno'}</button>
             {!userActive && <p className="driver-profile-note">Este perfil precisa ser reativado por um administrador no painel.</p>}
             {active && <p className="driver-profile-note">Conclua a entrega em andamento para encerrar seu turno.</p>}
-            <div className="driver-demo-explainer"><span><ShieldCheck size={20} /></span><div><strong>Você está na versão de demonstração</strong><p>Este perfil não é um login autenticado. As entregas, posições e quilômetros são dados locais para explorar as telas.</p></div></div>
-            {!native && <a className="driver-admin-mobile-link" href={screenHref('admin')}>Abrir painel administrativo<ArrowUpRight size={17} /></a>}
+            <div className="driver-demo-explainer"><span><ShieldCheck size={20} /></span><div><strong>{access ? 'Sua conta está conectada' : 'Você está na versão de demonstração'}</strong><p>{access ? 'Seu acesso e suas entregas são compartilhados com o painel. O mapa, as posições e os quilômetros continuam simulados até a conexão por GPS.' : 'Este perfil não é um login autenticado. As entregas, posições e quilômetros são dados locais para explorar as telas.'}</p></div></div>
+            {access && <button className="driver-sign-out" type="button" onClick={() => void access.signOut()}><LogOut size={18} /> Sair</button>}
+            {!native && !access && <a className="driver-admin-mobile-link" href={screenHref('admin')}>Abrir painel administrativo<ArrowUpRight size={17} /></a>}
           </>}
         </main>
 
@@ -213,8 +244,8 @@ export default function DriverApp({ state, actions }: ScreenProps) {
         </nav>
       </div>
 
-      {chooseDriver && <Sheet title="Escolher entregador" onClose={() => setChooseDriver(false)}><p className="driver-sheet-description">Explore as telas com um perfil de demonstração. A seleção fica salva neste dispositivo.</p><div className="driver-picker-list">{state.drivers.map(item => <button type="button" key={item.id} className={item.id === driver.id ? 'selected' : ''} onClick={() => selectDriver(item.id)}><span style={{ backgroundColor: item.color }}>{item.initials}</span><div><strong>{item.name}</strong><small>{item.vehicle} · {item.status === 'offline' ? 'Fora do turno' : item.status === 'on_route' ? 'Em rota' : 'Disponível'}</small></div>{item.id === driver.id ? <Check size={19} /> : <ChevronRight size={18} />}</button>)}</div></Sheet>}
-      {confirmId && <Sheet title="Confirmar entrega" onClose={() => setConfirmId(null)}><div className="driver-confirm-symbol"><CheckCheck size={30} /></div><p className="driver-sheet-description">Quem recebeu o pedido de <strong>{state.deliveries.find(item => item.id === confirmId)?.customer}</strong>?</p><form onSubmit={confirmDelivery}><label className="driver-field-label" htmlFor="driver-received-by">Nome de quem recebeu</label><input data-autofocus id="driver-received-by" className="driver-input" placeholder="Digite o nome do recebedor" value={receivedBy} onChange={event => setReceivedBy(event.target.value)} required maxLength={120} autoComplete="off" /><button className="driver-primary" type="submit" disabled={!receivedBy.trim()}><Check size={18} /> Confirmar entrega</button><p className="driver-confirm-note">A confirmação encerra o percurso simulado e atualiza as telas de demonstração.</p></form></Sheet>}
+      {chooseDriver && !access && <Sheet title="Escolher entregador" onClose={() => setChooseDriver(false)}><p className="driver-sheet-description">Explore as telas com um perfil de demonstração. A seleção fica salva neste dispositivo.</p><div className="driver-picker-list">{state.drivers.map(item => <button type="button" key={item.id} className={item.id === driver.id ? 'selected' : ''} onClick={() => selectDriver(item.id)}><span style={{ backgroundColor: item.color }}>{item.initials}</span><div><strong>{item.name}</strong><small>{item.vehicle} · {item.status === 'offline' ? 'Fora do turno' : item.status === 'on_route' ? 'Em rota' : 'Disponível'}</small></div>{item.id === driver.id ? <Check size={19} /> : <ChevronRight size={18} />}</button>)}</div></Sheet>}
+      {confirmId && <Sheet title="Confirmar entrega" onClose={() => { if (!submitting) setConfirmId(null); }}><div className="driver-confirm-symbol"><CheckCheck size={30} /></div><p className="driver-sheet-description">Quem recebeu o pedido de <strong>{state.deliveries.find(item => item.id === confirmId)?.customer}</strong>?</p><form onSubmit={confirmDelivery}><label className="driver-field-label" htmlFor="driver-received-by">Nome de quem recebeu</label><input data-autofocus id="driver-received-by" className="driver-input" placeholder="Digite o nome do recebedor" value={receivedBy} onChange={event => setReceivedBy(event.target.value)} required maxLength={120} autoComplete="off" disabled={submitting} /><button className="driver-primary" type="submit" disabled={busy || !receivedBy.trim()}><Check size={18} /> {submitting ? 'Confirmando…' : 'Confirmar entrega'}</button><p className="driver-confirm-note">{access ? 'A confirmação encerra o percurso simulado e atualiza as entregas no painel.' : 'A confirmação encerra o percurso simulado e atualiza as telas de demonstração.'}</p></form></Sheet>}
     </div>
   );
 }

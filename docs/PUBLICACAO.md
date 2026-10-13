@@ -1,6 +1,18 @@
 # Publicação do painel
 
-O fluxo `.github/workflows/pages.yml` publica o painel demonstrativo no GitHub Pages depois de cada envio para `main`. O build utiliza o HTML portátil único para manter fontes, ícones e navegação funcionando também no caminho `/entregas/`.
+Existem duas distribuições: a aplicação conectada precisa de um servidor Node e banco persistente; a prévia portátil é estática e pode ser publicada no GitHub Pages.
+
+## Aplicação conectada
+
+Instale Node.js 24, execute `npm ci` e `npm run build`, preencha o `.env` e use `npm start`. O servidor entrega `dist/`, responde a `/api` e mantém o SQLite em `DATABASE_PATH`. Configure o domínio com HTTPS pelo proxy reverso e armazenamento persistente para o banco. Não envie bancos ou credenciais junto dos arquivos estáticos.
+
+O Android usa a URL HTTPS da mesma central, configurada no login ou em `VITE_API_URL` no build. Autorize `https://localhost` em `ROTA_ALLOWED_ORIGINS` para o Capacitor. Veja [configuração completa da API](API.md).
+
+Esta versão foi validada localmente com servidor e sessões independentes; publicar a API em um domínio definitivo e testar em aparelho físico ainda são etapas pendentes. Sites estáticos, incluindo GitHub Pages e a prévia temporária, não executam essa API.
+
+## Prévia no GitHub Pages
+
+O fluxo `.github/workflows/pages.yml` constrói a prévia depois de cada envio para `main` e publica quando o Pages estiver configurado com fonte GitHub Actions. O build utiliza o HTML portátil único para manter fontes, ícones e navegação funcionando também no caminho `/entregas/`.
 
 ## Ativação inicial
 
@@ -14,7 +26,7 @@ Em repositório privado, a disponibilidade de Pages depende do plano da conta. P
 
 ## O que é publicado
 
-O site contém a demonstração das interfaces administrativas e do entregador. O botão **App do entregador** abre a prévia do app no próprio site. Dados continuam locais ao navegador; esta publicação ainda não conecta o Android ao painel, não autentica usuários nem consulta Alpha7 ou GPS.
+O site contém a demonstração das interfaces administrativas e do entregador. O botão **App do entregador** abre a prévia do app no próprio site. Nessa distribuição portátil, dados continuam locais ao navegador; ela não usa o login, banco ou API da aplicação conectada, nem consulta Alpha7 ou GPS.
 
 Nenhum SDK Android, APK, chave de assinatura, cache ou dependência instalada é enviado pelo workflow do site. Os arquivos publicados são os gerados pelo build em `.local/portable/`.
 

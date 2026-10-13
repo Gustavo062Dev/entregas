@@ -1,32 +1,44 @@
-# Interfaces da primeira etapa
+# Interfaces e validação
 
-## Administração
+## Acesso conectado
 
-**Visão geral** reúne a operação em uma tela: total de entregas, entregues, entregadores disponíveis e distância demonstrativa; mapa com seleção de entregador; e lista de entregas recentes.
+O painel começa pelo login de administrador ou gestor. O aplicativo Android e `/entregador` começam pelo login de entregador. Um perfil de entregador não abre o painel, e um perfil administrativo precisa entrar com a conta de entregador para testar o app. O servidor limita os dados e ações de cada conta.
 
-**Entregas** permite localizar destinatários, filtrar o status e o entregador e atribuir uma entrega ainda pendente. As rotas em andamento não podem ser reatribuídas.
+No painel, **Visão geral** reúne indicadores, mapa ilustrativo e equipe. **Entregas** permite buscar, filtrar e atribuir pedidos pendentes. **Relatórios** filtra viagens por data/entregador e exporta CSV, preservando acentos e tratando fórmulas de planilha. As posições e distâncias permanecem demonstrativas; GPS está pendente.
 
-**Relatórios** calcula distâncias a partir das viagens, respeitando os filtros de data e entregador. A distância de uma rota em andamento está incluída; as viagens concluídas têm horário de término. Os arquivos CSV preservam acentos e tratam campos que poderiam ser interpretados como fórmulas de planilha.
+**Usuários** aparece apenas para o administrador: cadastro, edição, ativação e redefinição de senha. Novas contas exigem senha de 12–128 caracteres. Um novo entregador recebe um perfil próprio; não usa a identidade de outro usuário. O último administrador ativo é preservado, e um entregador em rota precisa concluir a entrega antes de ser desativado.
 
-**Usuários** demonstra a gestão de administradores, gestores e entregadores. É uma interface local, sem login nesta fase. Usuários vinculados a entregadores em rota não podem ser desativados até a conclusão. A função do último administrador ativo não pode ser removida.
+No aplicativo, **Minha rota** apresenta turno, pedido e navegação interna demonstrativa. **Entregas** lista somente pedidos atribuídos ao usuário. **Histórico** apresenta suas viagens. **Perfil** mostra a identidade autenticada e permite sair; não oferece troca arbitrária de entregador.
 
-## Entregador
+As alterações esperam confirmação do servidor. Falhas de conexão exibem aviso e bloqueiam alterações até sincronizar novamente; conflitos não são sobrescritos silenciosamente. O painel consulta atualizações a cada cinco segundos quando está visível.
 
-O aplicativo Android abre a operação do entregador. A versão para navegador permite revisar as mesmas telas antes de instalar o APK.
+## Revisar a operação com dados fictícios
 
-**Minha rota** apresenta o turno, a próxima entrega e a navegação demonstrativa interna. A demonstração avança em quatro etapas; os quilômetros simulados seguem o progresso do trajeto e não leituras de GPS.
+1. Configure um banco novo com `API_DEMO_SEED=1`, administrador e senha do entregador fictício; veja [API.md](API.md).
+2. Execute `npm run dev` e entre no painel como administrador.
+3. Abra `/entregador` em outro navegador ou contexto privado e entre como `entregador1@example.com`.
+4. Inicie uma rota pendente, avance quatro etapas e confirme com o nome de quem recebeu.
+5. Confira a atualização do status e quilômetros no painel e exporte o relatório.
+6. Cadastre um usuário com senha, teste seu perfil, saia e tente acessar novamente após desativação.
 
-**Entregas** apresenta os pedidos atribuídos, endereço e status. **Histórico** apresenta viagens e quilômetros. **Perfil** apresenta a identificação e permite trocar o entregador da demonstração.
+O mesmo fluxo usa a API compartilhada no Android quando o aparelho alcança o servidor HTTPS. A validação em aparelho físico ainda está pendente. Em banco operacional sem dados fictícios, não há avanço de simulação; GPS e entrada de pedidos serão desenvolvidos em etapas seguintes.
 
-A confirmação de entrega exige o nome de quem recebeu. O aplicativo impede iniciar outra entrega quando existe uma rota em andamento, confirmar antes da chegada simulada ou operar com um usuário local desativado.
+## Teste de interface conectado
 
-## Roteiro para revisão
+`scripts/connected-smoke.py` usa Chromium/Playwright e sessões isoladas. Prepare um banco demonstrativo **novo** com as credenciais de QA escolhidas; o script não reinicializa o banco nem deve ser executado sobre dados operacionais.
 
-1. Abra a interface do entregador e selecione Rafael Costa.
-2. Inicie uma entrega pendente.
-3. Avance a simulação até chegar ao destino.
-4. Confirme a entrega com um nome de recebedor.
-5. Confira o status e os quilômetros no painel, aberto em outra aba do mesmo navegador.
-6. Experimente filtros, relatório CSV e cadastro de um usuário.
+```sh
+python scripts/connected-smoke.py
+```
 
-O mesmo fluxo pode ser revisado no APK Android, mas o painel web não recebe os dados do APK nesta etapa; a conexão entre dispositivos depende da futura API.
+O endereço e as credenciais de teste podem ser definidos por `UI_SMOKE_URL`, `QA_ADMIN_EMAIL`, `QA_ADMIN_PASSWORD`, `QA_DRIVER_EMAIL` e `QA_DRIVER_PASSWORD`. Os valores padrão são fixtures fictícias declaradas no script, sem uso em produção. `CHROMIUM_EXECUTABLE` seleciona o navegador e `UI_SMOKE_OUTPUT` altera a pasta de resultados. Senhas e tokens não são gravados nos relatórios.
+
+O roteiro valida login, criação de usuário, isolamento de perfis, entrega compartilhada, desativação, restauração e encerramento da sessão e layout em celular. Os resultados e capturas ficam em `.local/connected-qa/`.
+
+## Prévia portátil
+
+`npm run build:portable` mantém uma demonstração independente com armazenamento local, seleção de entregador fictício e nenhuma autenticação. Nessa prévia, mudanças sincronizam apenas entre abas da mesma origem. Ela é adequada para revisar as telas e pode ser hospedada no GitHub Pages.
+
+`scripts/ui-smoke.py` valida essa demonstração. Sirva o HTML único por HTTP e informe o endereço terminado em `/index.html` com `UI_SMOKE_URL`; alternativamente, inicie o Vite com `--mode portable` e use o endereço local. `UI_SMOKE_OUTPUT` permite separar os artefatos; `CHROMIUM_EXECUTABLE` seleciona Chromium.
+
+As credenciais e os dados do sistema conectado não são compartilhados com essa prévia.

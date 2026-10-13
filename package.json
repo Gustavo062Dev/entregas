@@ -3,10 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": { "node": ">=24" },
   "scripts": {
-    "dev": "vite --host 0.0.0.0",
-    "build": "tsc -b && vite build",
-    "build:portable": "tsc -b && vite build --mode portable && node scripts/package-portable.mjs",
+    "dev": "node --env-file-if-exists=.env scripts/dev.mjs",
+    "dev:ui": "vite --host 0.0.0.0",
+    "server:dev": "node --env-file-if-exists=.env --import tsx server/index.ts",
+    "start": "node --env-file-if-exists=.env --import tsx scripts/start.mjs",
+    "check": "tsc -b && tsc -p tsconfig.server.json",
+    "build": "npm run check && vite build",
+    "build:portable": "npm run check && vite build --mode portable && node scripts/package-portable.mjs",
     "preview": "vite preview --host 0.0.0.0",
     "test": "vitest run",
     "android:sync": "npm run build && cap sync android",
@@ -19,7 +24,8 @@
     "@fontsource-variable/manrope": "^5.3.0",
     "lucide-react": "^0.468.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "tsx": "^4.23.15"
   },
   "devDependencies": {
     "@capacitor/cli": "^7.4.3",

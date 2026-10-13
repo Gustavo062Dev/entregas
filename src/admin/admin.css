@@ -64,6 +64,15 @@
 .admin-topbar-actions { display: flex; align-items: center; gap: 19px; }
 .admin-demo-badge { display: flex; align-items: center; gap: 6px; color: #7b8b66; background: #f3f7e9; border: 1px solid #e6edd8; padding: 6px 9px; border-radius: 5px; font-size: 11px; font-weight: 500; white-space: nowrap; }
 .admin-demo-badge > span { height: 5px; width: 5px; background: #94a862; border-radius: 50%; }
+.admin-signout-button { display: inline-flex; align-items: center; gap: 6px; padding: 7px 9px; border: 1px solid #e1e7df; border-radius: 6px; background: #fff; color: #5a675e; font-size: 12px !important; }
+.admin-connection-banner { display: flex; align-items: flex-start; gap: 11px; padding: 15px 17px; margin-bottom: 25px; border: 1px solid #e1e8d8; border-radius: 9px; background: #f0f5e6; color: #617e43; }
+.admin-connection-banner > svg { flex-shrink: 0; margin-top: 2px; }
+.admin-connection-banner > div { flex: 1; min-width: 0; }
+.admin-connection-banner strong { display: block; font-size: 13px; font-weight: 650; }
+.admin-connection-banner p { margin-top: 5px; color: #788b69; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.admin-connection-banner.has-error { border-color: #f0d6c6; background: #fff3eb; color: #9a6247; }
+.admin-connection-banner.has-error p { color: #9a705a; }
+.admin-connection-banner .admin-button { flex-shrink: 0; align-self: center; }
 .admin-app-link { display: flex; align-items: center; gap: 7px; color: #5a675e !important; font-size: 12px; padding: 8px 0; }
 .admin-app-link:hover { color: #28382f !important; }
 .admin-profile { display: flex; align-items: center; gap: 9px; border-left: 1px solid #e9ede9; padding-left: 19px; }
@@ -257,6 +266,7 @@
 .admin-modal-header .admin-eyebrow { font-size: 9px; letter-spacing: 1.4px; margin-bottom: 9px; }
 .admin-modal-header h2 { font-size: 22px; line-height: 1.3; font-weight: 600; letter-spacing: -.7px; color: #465c34; }
 .admin-user-form, .admin-detail-content, .admin-info-modal { padding: 23px 27px 0; }
+.admin-user-fields { min-width: 0; padding: 0; margin: 0; border: 0; }
 .admin-form-intro { color: #849b69; font-size: 12px; line-height: 1.8; margin-bottom: 24px !important; }
 .admin-form-field { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
 .admin-form-field > span { font-size: 12px; font-weight: 500; color: #789059; }
@@ -375,6 +385,10 @@
   .admin-report-stats .admin-metric-detail { font-size: 9px; }
 }
 @media (max-width: 760px) {
+  .admin-topbar-connected .admin-connected-badge { display: none; }
+  .admin-topbar-connected .admin-signout-button { gap: 4px; padding: 6px; font-size: 11px !important; }
+  .admin-connection-banner { flex-wrap: wrap; padding: 13px; gap: 9px; }
+  .admin-connection-banner .admin-button { margin-left: 28px; }
   .admin-sidebar { width: 232px; transform: translateX(-100%); transition: transform .2s; }
   .admin-sidebar.is-open { transform: translateX(0); }
   .admin-sidebar-scrim { display: block; position: fixed; inset: 0; z-index: 44; background: #17272480; border: 0; }

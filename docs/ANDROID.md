@@ -1,10 +1,10 @@
 # Aplicativo Android
 
-O projeto nativo em `android/` usa Capacitor 7 e abre diretamente a tela do entregador. O painel administrativo continua disponível no navegador. A navegação apresentada nesta primeira versão é uma demonstração dentro do aplicativo; integração com Alpha7, GPS contínuo e cálculo de rotas reais ficam para a etapa de integração.
+O projeto nativo em `android/` usa Capacitor 7 e abre o login do entregador. O painel administrativo continua disponível no navegador. Ambos conectam à mesma API e banco. A navegação apresentada continua demonstrativa dentro do aplicativo; GPS e rotas reais serão desenvolvidos nas próximas etapas, e Alpha7 fica por último.
 
 ## Gerar um APK de desenvolvimento
 
-Requisitos: Node.js 22 ou superior, JDK 21 e Android SDK 35. No Linux, os scripts usam caches em `.local/`, que não são versionados.
+Requisitos: Node.js 24, JDK 21 e Android SDK 35. No Linux, os scripts usam caches em `.local/`, que não são versionados.
 
 ```bash
 npm ci
@@ -27,7 +27,9 @@ Com um aparelho autorizado conectado por USB:
 .local/android-sdk/platform-tools/adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-O app requer Android 6.0 (API 23) ou superior. Não exige credenciais de API para as telas demonstrativas. Os dados demonstrativos são armazenados localmente em cada instalação; o painel web e o APK não sincronizam dados entre aparelhos nesta etapa.
+O app requer Android 6.0 (API 23) ou superior. O administrador cria a conta do entregador pelo painel e define a senha inicial. Informe o endereço HTTPS da central no login; ele pode ser incorporado em `VITE_API_URL` antes do build. Configure `ROTA_ALLOWED_ORIGINS=https://localhost` no servidor para a origem do Capacitor (acrescente outras origens exatas se necessário).
+
+Com a API acessível, entregas, turnos e confirmações são compartilhados com o painel pelo servidor. O app usa sessão com prazo de 12 horas, possui saída pelo Perfil e guarda o token durante a sessão. Reiniciar o processo do app pode exigir novo login. Falhas de rede bloqueiam alterações até sincronizar novamente; fila offline ainda não foi implementada. O mapa é ilustrativo e não fornece orientação real para dirigir.
 
 ## Usar Android Studio
 

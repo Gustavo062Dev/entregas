@@ -14,3 +14,7 @@ svg { flex-shrink: 0; }
 .app-toast button { padding: 5px; border: 0; background: transparent; display: flex; color: white; }
 @media (max-width: 600px) { .app-toast { bottom: calc(90px + env(safe-area-inset-bottom)); width: calc(100vw - 28px); } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; } }
+.app-connection-screen { min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; gap: 16px; background: #f3f7f3; }
+.app-connection-screen h1 { font-size: 24px; margin: 0; }
+.app-connection-screen p { max-width: 480px; overflow-wrap: anywhere; }
+.app-connection-screen button { padding: 12px 24px; border: 1px solid #d0ddd4; border-radius: 12px; background: #fff; color: #244d3a; cursor: pointer; }

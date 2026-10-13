@@ -1,97 +1,107 @@
 # Rota · Gestão de entregas
 
-Primeira etapa do produto: **painel administrativo web e aplicativo Android do entregador**, com navegação demonstrativa dentro do próprio aplicativo. A integração com o Alpha7 será a última etapa, conforme a prioridade definida.
+Painel administrativo web e aplicativo Android do entregador, agora com **login, permissões e API compartilhada com banco SQLite**. A integração com o Alpha7 permanece na última etapa.
 
-A publicação automática do painel está preparada para GitHub Pages. Veja [a ativação e validação da hospedagem](docs/PUBLICACAO.md).
+O administrador gerencia usuários; o gestor acompanha entregas e relatórios e atribui pedidos; cada entregador acessa apenas seus próprios pedidos, perfil e histórico. O servidor valida essas permissões em cada solicitação. As telas consultam atualizações a cada cinco segundos, com sessões independentes por aba/dispositivo.
 
-## Abrir o painel sem instalar o projeto
+**Mapa, navegação e quilômetros continuam demonstrativos.** Esta versão não captura GPS nem oferece orientação real para dirigir. A conexão e os cadastros são funcionais; a operação de entregas pode ser exercitada com dados fictícios em um banco de desenvolvimento.
 
-O arquivo `painel-rota.html` é uma versão interativa portátil. Baixe o arquivo e abra-o no Chrome do computador. Fontes, estilos, ícones e código estão incorporados, sem dependências de arquivos auxiliares. O botão **App do entregador** abre a prévia do entregador usando o mesmo HTML; os links de retorno preservam o nome e a localização do arquivo.
+## Executar o sistema conectado
 
-Para gerar novamente:
+Requisitos: **Node.js 24** e npm. O `package-lock.json` fixa as dependências.
 
 ```sh
 npm ci
-npm run build:portable
+cp .env.example .env
 ```
 
-Resultado: `.local/artifacts/painel-rota.html`. É uma demonstração local, sem endereço público nem conexão entre computadores. Os dados são armazenados pelo navegador quando ele permite armazenamento local. O build normal e o projeto Android continuam usando as rotas `/` e `/entregador`.
-
-O HTML foi validado como documento único servido por HTTP local, incluindo links, cadastros, relatórios e entregas. O navegador automatizado deste ambiente bloqueia navegação em `file://`; por isso a abertura direta por duplo clique ainda precisa ser confirmada no computador do usuário.
-
-## Executar
-
-Requisitos: Node.js 22 ou superior e npm. O arquivo `package-lock.json` fixa as versões instaladas.
+Preencha `ROTA_ADMIN_EMAIL`, `ROTA_ADMIN_PASSWORD` e, opcionalmente, `ROTA_ADMIN_NAME` no arquivo `.env`. A senha deve ter de 12 a 128 caracteres. Não existe senha padrão. Esses valores provisionam o primeiro administrador de um banco novo; depois disso, as contas são gerenciadas pelo painel. O arquivo `.env` e os bancos em `.local/` ficam fora do Git.
 
 ```sh
-npm ci
 npm run dev
 ```
 
-O Vite informa o endereço local. O caminho `/` abre o painel; `/entregador` abre a interface do entregador no navegador. O botão **App do entregador** no painel também abre essa interface. No Android, o aplicativo abre diretamente a interface do entregador.
+Esse comando inicia a API na porta 3001 e o Vite na porta 5173. `/` abre o painel; `/entregador` abre a interface do entregador. O Vite encaminha `/api` ao servidor. `npm run dev:ui` inicia somente as telas e exige uma API disponível para login.
+
+O administrador pode cadastrar contas e definir ou redefinir suas senhas em **Usuários**. Um novo usuário com perfil **Entregador** recebe um cadastro de entregador, inicialmente fora do turno. Contas sem vínculo não recebem dados de outro entregador. O perfil Gestor não acessa a gestão de usuários.
+
+Veja [configuração, API e persistência](docs/API.md) e [fluxos das interfaces](docs/INTERFACES.md).
+
+## Exercitar o fluxo de entregas
+
+Para um banco de desenvolvimento **novo e separado**, configure no `.env`:
+
+```dotenv
+API_DEMO_SEED=1
+DATABASE_PATH=.local/data/demo.sqlite
+```
+
+Defina também `ROTA_DEMO_DRIVER_PASSWORD` se quiser provisionar o acesso do entregador `entregador1@example.com`. Sem esse valor, o administrador pode abrir o cadastro desse entregador no painel e definir uma senha. Os demais cadastros fictícios não possuem senha inicial.
+
+Entre no painel com o administrador configurado e, em outro navegador ou contexto privado, no app com o entregador. Inicie uma rota, avance as quatro etapas da simulação e confirme o recebedor. O painel recebe o novo status, histórico e quilômetros pelo servidor, inclusive quando os clientes estão em dispositivos diferentes com acesso à mesma API.
+
+O modo do banco é gravado na primeira inicialização. Mudar `API_DEMO_SEED` depois não transforma um banco operacional em demonstrativo nem apaga dados. Use outro `DATABASE_PATH` para mudar de modo. Um banco operacional novo começa sem pedidos fictícios; entrada de pedidos e GPS serão desenvolvidos nas próximas etapas.
+
+## Verificar e compilar
 
 ```sh
 npm test
 npm run build
-npm run preview
 ```
 
-O build de produção fica em `dist/`. Para servir em produção, configure seu servidor para retornar `index.html` nas rotas da aplicação.
+Os testes cobrem regras de entregas, autenticação, isolamento entre entregadores, revogação de sessões, concorrência, persistência e falhas de conexão. `npm run check` verifica TypeScript nas telas e no servidor.
 
-Há também um teste de interface reutilizável em `scripts/ui-smoke.py`. Com o servidor Vite em execução, use `python scripts/ui-smoke.py` em um ambiente com Python, Playwright e Chromium. Neste ambiente essas ferramentas já estão disponíveis. `UI_SMOKE_URL` altera o endereço testado e `CHROMIUM_EXECUTABLE` permite selecionar o navegador. O teste usa um contexto isolado, exercita as duas interfaces e escreve resultados em `.local/qa/`.
+`npm run build` gera a interface conectada em `dist/`. Para servir interface e API juntas:
 
-O mesmo teste aceita o endereço de um HTML portátil em `UI_SMOKE_URL`; ele verifica também a troca entre painel e entregador. `UI_SMOKE_OUTPUT` permite salvar o relatório e as capturas em outra pasta.
+```sh
+npm start
+```
 
-## O que funciona nesta etapa
+O comando carrega `.env`, inicia em modo de produção e serve `dist/`. Configure HTTPS no proxy reverso para acesso externo; a aplicação Android exige um endereço HTTPS da API. A pasta do banco precisa de armazenamento persistente e backup. A API funciona como processo único; expansão para várias instâncias e banco dedicado fica para uma etapa posterior. [Detalhes da publicação](docs/PUBLICACAO.md).
 
-- Painel: indicadores derivados dos dados, seleção de entregadores no mapa, busca de entregas, filtros e atribuição de entregas pendentes.
-- Relatórios: filtro por período e entregador, quilômetros demonstrativos e download CSV.
-- Usuários: cadastro, edição e ativação/desativação local. O último administrador ativo é preservado.
-- Entregador: seleção de perfil demonstrativo, turno, lista de entregas, mapa da rota dentro do app, instruções, progresso do percurso, confirmação de recebimento, histórico e perfil.
-- Fluxo compartilhado: iniciar uma rota, avançar a simulação, informar o recebedor e confirmar a entrega atualiza os indicadores e os relatórios. Um entregador não pode iniciar duas rotas simultâneas.
-- Dados salvos localmente e sincronizados entre abas **do mesmo navegador e da mesma origem**. A versão Android tem armazenamento próprio.
+## Prévia portátil das telas
+
+```sh
+npm run build:portable
+```
+
+Gera `.local/artifacts/painel-rota.html`: um HTML único com fontes, ícones, estilos e código incorporados. Essa prévia mantém o modo local de demonstração, sem login ou API. O botão **App do entregador** abre a interface pelo mesmo arquivo; a navegação também funciona sob caminhos como `/entregas/`.
+
+A prévia usa armazenamento do navegador, quando disponível, e sincroniza apenas abas da mesma origem. **GitHub Pages hospeda essa demonstração; não hospeda o servidor conectado.** A versão conectada não usa os cadastros locais da prévia.
+
+Há duas verificações de interface em Python/Playwright: `scripts/ui-smoke.py` para a prévia e `scripts/connected-smoke.py` para a API com duas sessões isoladas. Os artefatos de QA ficam em `.local/`. Consulte [o roteiro e as variáveis de QA](docs/INTERFACES.md).
 
 ## Android
 
-O projeto nativo está em `android/`, usando Capacitor 7 e Java 21. Veja [como compilar e instalar](docs/ANDROID.md).
+O projeto nativo está em `android/`, com Capacitor 7, JDK 21 e SDK 35. Ele abre o login do entregador e conecta à mesma API do painel. A sessão tem prazo de 12 horas; o usuário pode sair pelo perfil.
 
 ```sh
 npm run android:sync
 npm run android:open
 ```
 
-Também é possível usar `scripts/build-android.sh` com um Android SDK local já instalado. O APK debug é um artefato de desenvolvimento; a assinatura e publicação de produção serão feitas em etapa posterior.
+O endereço da central pode ser definido em `VITE_API_URL` antes do build ou informado no login do Android. Autorize a origem `https://localhost` do Capacitor em `ROTA_ALLOWED_ORIGINS` no servidor. [Compilação e configuração Android](docs/ANDROID.md).
 
-## Limites da demonstração
-
-Todos os nomes, entregas, endereços e valores apresentados são dados demonstrativos. O mapa é uma ilustração e não representa uma malha viária utilizável para condução. As posições e os quilômetros mudam pelo botão de simulação; o aplicativo **ainda não captura GPS nem oferece orientação real para dirigir**.
-
-Esta etapa não possui servidor, login, permissões de acesso, banco compartilhado entre dispositivos, Alpha7 ou sincronização Android–painel. O gerenciamento de usuários demonstra a interface e as regras locais; não protege acesso a dados. Não use a demonstração para uma operação real.
-
-A navegação definitiva será **dentro do aplicativo**, com um provedor de mapas e rotas. Não depende de abrir Waze ou Google Maps.
+O APK debug é para desenvolvimento. A assinatura de produção e testes em aparelho físico permanecem pendentes.
 
 ## Organização
 
 ```text
-src/admin/          Painel administrativo e suas telas
+src/admin/          Painel administrativo
 src/driver/         Aplicativo do entregador
-src/components/     Mapa demonstrativo compartilhado
-src/types.ts        Contratos dos dados e ações
-src/demo.ts         Dados fictícios
-src/store.ts        Estado local e regras do fluxo
-src/store.test.ts   Testes das regras de entregas e usuários
+src/auth/           Login responsivo
+src/connected.ts    Sessão, chamadas API e sincronização
+src/domain.ts       Regras compartilhadas de entregas e usuários
+src/store.ts        Armazenamento da prévia portátil
+src/components/     Mapa ilustrativo
+server/             API HTTP, validação, sessões e SQLite
 android/            Aplicação Android nativa
-scripts/            Ferramentas para build Android
+scripts/            Desenvolvimento, QA e builds Android
 ```
-
-Fontes, ícones e mapa estão no bundle e funcionam sem serviços externos. A construção das interfaces não solicita credenciais.
 
 ## Próximas etapas
 
-1. Revisar as interfaces com a operação e ajustar campos e fluxos.
-2. Implementar API, autenticação e banco compartilhado.
-3. Implementar GPS com permissões Android, captura em segundo plano, fila offline e medição validada de quilômetros.
-4. Implementar mapas e navegação real dentro do aplicativo, testar em dispositivo Android e conectar ao acompanhamento no painel.
-5. Integrar pedidos e endereços do Alpha7 após confirmar sua API ou formato de exportação.
-
-As próximas etapas estão documentadas para manter clara a diferença entre as interfaces criadas agora e o sistema operacional completo.
+1. GPS Android: permissões, captura em segundo plano, fila offline e medição de quilômetros.
+2. Mapas e navegação real dentro do app, com provedor de rotas, e acompanhamento geográfico no painel.
+3. Testes de campo no Android e preparação da operação, recuperação de acesso e publicação.
+4. Integração de pedidos e endereços do Alpha7, após confirmar sua API ou formato de exportação.

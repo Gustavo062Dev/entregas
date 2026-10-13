@@ -17,6 +17,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      pages_enabled: ${{ steps.pages.outputs.enabled }}
     steps:
       - name: Obter o projeto
         uses: actions/checkout@v4
@@ -29,17 +31,38 @@ jobs:
         run: npm ci
       - name: Testar as regras de entregas
         run: npm test
+      - name: Construir a aplicação conectada
+        run: npm run build
       - name: Construir o painel
         run: npm run build:portable
+      - name: Verificar a fonte do GitHub Pages
+        id: pages
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module <<'JS'
+          import { appendFileSync } from 'node:fs';
+          const response = await fetch(`${process.env.GITHUB_API_URL}/repos/${process.env.GITHUB_REPOSITORY}/pages`, {
+            redirect: 'error',
+            headers: { Authorization: `Bearer ${process.env.GITHUB_TOKEN}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
+          });
+          if (!response.ok && response.status !== 404) throw new Error(`Não foi possível consultar o Pages: HTTP ${response.status}.`);
+          const enabled = response.ok && (await response.json()).build_type === 'workflow';
+          appendFileSync(process.env.GITHUB_OUTPUT, `enabled=${enabled}\n`);
+          if (!enabled) console.log('Testes e builds concluídos. Publicação pendente: configure Settings → Pages → Source → GitHub Actions.');
+          JS
       - name: Configurar GitHub Pages
+        if: steps.pages.outputs.enabled == 'true'
         uses: actions/configure-pages@v5
       - name: Preparar os arquivos para publicação
+        if: steps.pages.outputs.enabled == 'true'
         uses: actions/upload-pages-artifact@v3
         with:
           path: .local/portable
 
   deploy:
     needs: build
+    if: needs.build.outputs.pages_enabled == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
