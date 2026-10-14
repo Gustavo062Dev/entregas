@@ -1,10 +1,10 @@
 # Rota · Gestão de entregas
 
-Painel administrativo web e aplicativo Android do entregador, agora com **login, permissões e API compartilhada com banco SQLite**. A integração com o Alpha7 permanece na última etapa.
+Painel administrativo web e aplicativo Android do entregador, com **login, permissões, GPS Android e API compartilhada com banco SQLite**. A integração com o Alpha7 permanece na última etapa.
 
 O administrador gerencia usuários; o gestor acompanha entregas e relatórios e atribui pedidos; cada entregador acessa apenas seus próprios pedidos, perfil e histórico. O servidor valida essas permissões em cada solicitação. As telas consultam atualizações a cada cinco segundos, com sessões independentes por aba/dispositivo.
 
-**Mapa, navegação e quilômetros continuam demonstrativos.** Esta versão não captura GPS nem oferece orientação real para dirigir. A conexão e os cadastros são funcionais; a operação de entregas pode ser exercitada com dados fictícios em um banco de desenvolvimento.
+**GPS e mapa geográfico estão implementados na aplicação conectada.** O entregador ativa o registro durante o turno; o Android guarda pontos sem internet e o servidor calcula a distância estimada. O painel mostra a última posição recebida, sua precisão e idade. Navegação viária com instruções reais permanece na próxima etapa. A prévia portátil e bancos demonstrativos continuam simulados. Veja [captura, filtros, fila e validação GPS](docs/GPS.md).
 
 ## Executar o sistema conectado
 
@@ -40,7 +40,7 @@ Defina também `ROTA_DEMO_DRIVER_PASSWORD` se quiser provisionar o acesso do ent
 
 Entre no painel com o administrador configurado e, em outro navegador ou contexto privado, no app com o entregador. Inicie uma rota, avance as quatro etapas da simulação e confirme o recebedor. O painel recebe o novo status, histórico e quilômetros pelo servidor, inclusive quando os clientes estão em dispositivos diferentes com acesso à mesma API.
 
-O modo do banco é gravado na primeira inicialização. Mudar `API_DEMO_SEED` depois não transforma um banco operacional em demonstrativo nem apaga dados. Use outro `DATABASE_PATH` para mudar de modo. Um banco operacional novo começa sem pedidos fictícios; entrada de pedidos e GPS serão desenvolvidos nas próximas etapas.
+O modo do banco é gravado na primeira inicialização. Mudar `API_DEMO_SEED` depois não transforma um banco operacional em demonstrativo nem apaga dados. Use outro `DATABASE_PATH` para mudar de modo. Um banco operacional novo começa sem pedidos fictícios; o GPS pode ser ativado após cadastrar um entregador e iniciar seu turno. Entrada de pedidos e navegação viária serão desenvolvidas nas próximas etapas.
 
 ## Verificar e compilar
 
@@ -49,7 +49,7 @@ npm test
 npm run build
 ```
 
-Os testes cobrem regras de entregas, autenticação, isolamento entre entregadores, revogação de sessões, concorrência, persistência e falhas de conexão. `npm run check` verifica TypeScript nas telas e no servidor.
+Os testes cobrem regras de entregas, autenticação, isolamento, revogação, concorrência, persistência, falhas de conexão e cálculo GPS: ruído, saltos, interrupções, reenvios e meia-noite. `npm run check` verifica TypeScript nas telas e no servidor.
 
 `npm run build` gera a interface conectada em `dist/`. Para servir interface e API juntas:
 
@@ -69,7 +69,7 @@ Gera `.local/artifacts/painel-rota.html`: um HTML único com fontes, ícones, es
 
 A prévia usa armazenamento do navegador, quando disponível, e sincroniza apenas abas da mesma origem. **GitHub Pages hospeda essa demonstração; não hospeda o servidor conectado.** A versão conectada não usa os cadastros locais da prévia.
 
-Há duas verificações de interface em Python/Playwright: `scripts/ui-smoke.py` para a prévia e `scripts/connected-smoke.py` para a API com duas sessões isoladas. Os artefatos de QA ficam em `.local/`. Consulte [o roteiro e as variáveis de QA](docs/INTERFACES.md).
+Há verificações de interface em Python/Playwright: `scripts/ui-smoke.py` para a prévia, `scripts/connected-smoke.py` para entregas demonstrativas compartilhadas e `scripts/gps-smoke.py` para a operação GPS com amostras sintéticas e duas sessões isoladas. Os artefatos de QA ficam em `.local/`. Consulte [o roteiro e as variáveis de QA](docs/INTERFACES.md).
 
 ## Android
 
@@ -82,7 +82,7 @@ npm run android:open
 
 O endereço da central pode ser definido em `VITE_API_URL` antes do build ou informado no login do Android. Autorize a origem `https://localhost` do Capacitor em `ROTA_ALLOWED_ORIGINS` no servidor. [Compilação e configuração Android](docs/ANDROID.md).
 
-O APK debug é para desenvolvimento. A assinatura de produção e testes em aparelho físico permanecem pendentes.
+O APK debug é para desenvolvimento. A assinatura de produção, testes de GPS em aparelho físico e comparação de distância com odômetro permanecem pendentes. A captura usa um serviço visível no Android; encerrar o rastreamento ou sair interrompe a coleta.
 
 ## Organização
 
@@ -93,7 +93,8 @@ src/auth/           Login responsivo
 src/connected.ts    Sessão, chamadas API e sincronização
 src/domain.ts       Regras compartilhadas de entregas e usuários
 src/store.ts        Armazenamento da prévia portátil
-src/components/     Mapa ilustrativo
+src/components/     Mapa geográfico GPS e mapa da demonstração
+src/tracking/       Ponte nativa e controle de rastreamento
 server/             API HTTP, validação, sessões e SQLite
 android/            Aplicação Android nativa
 scripts/            Desenvolvimento, QA e builds Android
@@ -101,7 +102,6 @@ scripts/            Desenvolvimento, QA e builds Android
 
 ## Próximas etapas
 
-1. GPS Android: permissões, captura em segundo plano, fila offline e medição de quilômetros.
-2. Mapas e navegação real dentro do app, com provedor de rotas, e acompanhamento geográfico no painel.
-3. Testes de campo no Android e preparação da operação, recuperação de acesso e publicação.
-4. Integração de pedidos e endereços do Alpha7, após confirmar sua API ou formato de exportação.
+1. Geocodificação de destinos e navegação viária dentro do app, com provedor de rotas.
+2. Testes de campo do GPS Android, calibração dos filtros e preparação da operação, recuperação de acesso e publicação.
+3. Integração de pedidos e endereços do Alpha7, após confirmar sua API ou formato de exportação.

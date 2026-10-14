@@ -484,3 +484,8 @@
   .admin-detail-customer .admin-status { font-size: 6px; }
   .admin-detail-customer h3 { font-size: 13px; }
 }
+.admin-driver-gps-note { display: flex; align-items: center; gap: 6px; margin-top: 10px; color: #66825f; font-size: 11px; line-height: 1.6; text-align: left; }
+.admin-driver-gps-note.is-stale { color: #94836b; }
+.admin-driver-gps-note svg { flex-shrink: 0; }
+.admin-map-status { max-width: 170px; text-align: right; line-height: 1.5; }
+.admin-map-footer { flex-wrap: wrap; line-height: 1.6; }

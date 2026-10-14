@@ -233,6 +233,35 @@
 .driver-native .driver-phone { width: 100%; min-height: 100dvh; border: none; border-radius: 0; box-shadow: none; }
 .driver-native .driver-header { padding-top: calc(23px + env(safe-area-inset-top, 0px)); }
 .driver-native .driver-bottom-nav { padding-bottom: calc(13px + env(safe-area-inset-bottom, 0px)); }
+.driver-tracking-card { margin: 17px 0 23px; padding: 15px; border: 1px solid #dfe7d8; border-radius: 12px; background: #fafcf6; }
+.driver-tracking-card.is-running { background: #f1f7e9; border-color: #d0e2bb; }
+.driver-tracking-heading { display: flex; gap: 10px; align-items: flex-start; }
+.driver-tracking-heading > span { color: #779952; flex-shrink: 0; }
+.driver-tracking-heading strong { font-size: 12px; color: #50693a; }
+.driver-tracking-heading p { color: #7b8970; font-size: 11px; line-height: 1.7; margin-top: 5px; }
+.driver-tracking-point, .driver-tracking-queue, .driver-tracking-error { font-size: 11px; line-height: 1.7; margin-top: 10px !important; color: #6b7c5b; }
+.driver-tracking-point.is-stale { color: #8f7650; }
+.driver-tracking-queue span { display: block; }
+.driver-tracking-error { color: #ab5748; padding: 9px 10px; background: #fff0ec; border-radius: 7px; }
+.driver-tracking-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.driver-tracking-actions .driver-primary, .driver-tracking-actions .driver-secondary { margin: 0; }
+.driver-tracking-retry { display: flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; background: #fff; border: 1px solid #dfe7d5; border-radius: 8px; color: #6b7f57; font-size: 11px; }
+.driver-destination-real { display: flex; gap: 12px; padding: 17px; align-items: flex-start; color: #7a925f; }
+.driver-destination-real > svg { flex-shrink: 0; }
+.driver-destination-real small { display: block; font-size: 9px; letter-spacing: .6px; color: #8d9a7b; }
+.driver-destination-real strong { display: block; margin-top: 6px; color: #4d6340; font-size: 14px; }
+.driver-destination-real p { font-size: 12px; line-height: 1.6; margin-top: 6px; color: #6a7b59; overflow-wrap: anywhere; }
+.driver-destination-real div > span { display: block; margin-top: 5px; color: #8b987e; font-size: 11px; }
+.driver-gps-trip-distance { display: flex; gap: 10px; align-items: center; padding: 16px 17px; color: #7d965d; }
+.driver-gps-trip-distance strong { display: block; font-size: 17px; color: #5b7543; }
+.driver-gps-trip-distance span { display: block; font-size: 11px; margin-top: 4px; color: #91a17e; }
+.driver-preview-map-real { height: 220px; }
+.driver-idle-map { border-radius: 12px; border-bottom: 1px solid #e2e7dd; }
+.driver-preview-map .gps-map, .driver-active-map .gps-map { min-height: 0; }
+.driver-page .gps-map-controls button { width: 38px; height: 44px; }
+.driver-page .gps-map-empty { padding: 22px 25px; }
+.driver-page .gps-map-empty strong { font-size: 13px; }
+.driver-page .gps-map-empty p { font-size: 11px; }
 @media (min-width: 701px) { .driver-phone { height: calc(100dvh - 80px); min-height: 760px; max-height: 960px; } .driver-phone > .driver-main { overflow-y: auto; scrollbar-width: thin; scrollbar-color: #d5ddca transparent; } .driver-native .driver-phone { height: auto; max-height: none; } .driver-native .driver-main { overflow: visible; } }
 @media (max-width: 1020px) { .driver-page { gap: 55px; } .driver-preview-context { width: 270px; } .driver-preview-context h1 { font-size: 35px; } }
 @media (max-width: 800px) { .driver-preview-context { display: none; } }

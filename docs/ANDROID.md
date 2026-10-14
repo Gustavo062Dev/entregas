@@ -1,6 +1,6 @@
 # Aplicativo Android
 
-O projeto nativo em `android/` usa Capacitor 7 e abre o login do entregador. O painel administrativo continua disponível no navegador. Ambos conectam à mesma API e banco. A navegação apresentada continua demonstrativa dentro do aplicativo; GPS e rotas reais serão desenvolvidos nas próximas etapas, e Alpha7 fica por último.
+O projeto nativo em `android/` usa Capacitor 7 e abre o login do entregador. O painel administrativo continua disponível no navegador. Ambos conectam à mesma API e banco. A aplicação conectada já captura GPS por serviço Android e apresenta mapa geográfico; rotas viárias e instruções de navegação serão desenvolvidas na próxima etapa. Alpha7 fica por último.
 
 ## Gerar um APK de desenvolvimento
 
@@ -29,7 +29,7 @@ Com um aparelho autorizado conectado por USB:
 
 O app requer Android 6.0 (API 23) ou superior. O administrador cria a conta do entregador pelo painel e define a senha inicial. Informe o endereço HTTPS da central no login; ele pode ser incorporado em `VITE_API_URL` antes do build. Configure `ROTA_ALLOWED_ORIGINS=https://localhost` no servidor para a origem do Capacitor (acrescente outras origens exatas se necessário).
 
-Com a API acessível, entregas, turnos e confirmações são compartilhados com o painel pelo servidor. O app usa sessão com prazo de 12 horas, possui saída pelo Perfil e guarda o token durante a sessão. Reiniciar o processo do app pode exigir novo login. Falhas de rede bloqueiam alterações até sincronizar novamente; fila offline ainda não foi implementada. O mapa é ilustrativo e não fornece orientação real para dirigir.
+Com a API acessível, entregas, turnos e confirmações são compartilhados com o painel pelo servidor. O app usa sessão com prazo de 12 horas, possui saída pelo Perfil e guarda o token durante a sessão. Reiniciar o processo do app pode exigir novo login. Falhas de rede bloqueiam comandos de entrega, mas o GPS mantém pontos em fila local para posterior envio. Ative o GPS explicitamente durante o turno: a captura continua em segundo plano com uma notificação e controle de parada. O mapa acompanha a posição geográfica e ainda não fornece instruções viárias. Veja [permissões, fila e testes necessários](GPS.md).
 
 ## Usar Android Studio
 

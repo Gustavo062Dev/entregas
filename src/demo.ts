@@ -49,5 +49,6 @@ export function createDemoState(today = localDay()): AppState {
 }
 
 export function deriveState(state: AppState): AppState {
-  return { ...state, drivers: state.drivers.map(driver => ({ ...driver, kmToday: Math.round(state.trips.filter(t => t.driverId === driver.id && t.date === state.demoDate).reduce((sum, t) => sum + t.km, 0) * 100) / 100 })) };
+  return { ...state, drivers: state.drivers.map(driver => ({ ...driver, kmToday: Math.round(state.trips.filter(t => t.driverId === driver.id && t.date === state.demoDate && t.distanceSource !== 'gps').reduce((sum, t) => sum + t.km, 0) * 100) / 100
+    + (state.gpsDays ?? []).filter(day => day.driverId === driver.id && day.date === state.demoDate).reduce((sum, day) => sum + day.meters / 1000, 0) })) };
 }

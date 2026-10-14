@@ -38,7 +38,7 @@ function ConnectedApp() {
   const wrongProfile = Boolean(app.user && !allowed);
 
   if (allowed && app.state) {
-    const access = { user: app.user!, signOut: app.logout, syncing: app.syncing, error: app.error, refresh: app.refresh, simulation: app.simulation };
+    const access = { user: app.user!, signOut: app.logout, syncing: app.syncing, error: app.error, refresh: app.refresh, simulation: app.simulation, tracking: app.tracking };
     return <>{isDriver ? <DriverApp state={app.state} actions={app.actions} access={access} /> : <AdminApp state={app.state} actions={app.actions} access={access} />}{toast}</>;
   }
   if (allowed && app.status === 'unavailable') return <main className="app-connection-screen"><Info size={32} /><h1>Não foi possível carregar a operação</h1><p role="alert">{app.error}</p><button onClick={() => void app.refresh()} disabled={app.syncing}>Tentar novamente</button><button onClick={() => void app.logout()}>Sair da conta</button>{toast}</main>;

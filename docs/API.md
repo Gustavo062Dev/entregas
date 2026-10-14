@@ -56,9 +56,9 @@ Erros retornam `{error:string}`: 400 para dados inválidos, 401 para sessão aus
 
 SQLite armazena o estado compartilhado, credenciais, sessões e o modo do banco. Alterações usam transação e revisão crescente; comandos enviados com revisão antiga não sobrescrevem dados recentes. O cliente recarrega após conflito e pede que o usuário revise e repita a ação. Não reenvia automaticamente uma alteração cujo resultado ficou incerto por falha de rede.
 
-As telas consultam o servidor a cada cinco segundos quando visíveis. Erros de rede mantêm os últimos dados na tela e bloqueiam alterações até **Tentar novamente** sincronizar. Não há escrita offline nem websocket nesta fase. O APK não depende do armazenamento local da demonstração web.
+As telas consultam o servidor a cada cinco segundos quando visíveis. Erros de rede mantêm os últimos dados na tela e bloqueiam alterações até **Tentar novamente** sincronizar. Comandos de entregas exigem conexão; a fila offline é específica para pontos GPS no Android. Não há websocket nesta fase. O APK não depende do armazenamento local da demonstração web.
 
-`API_DEMO_SEED` só define o modo na criação do banco. Reiniciar com outra configuração não mistura nem substitui dados: use arquivos separados para testes e operação. Um banco operacional novo começa com apenas o administrador; pedidos, GPS e rotas reais ainda precisam das próximas etapas. O banco demonstrativo mantém os rótulos de simulação ao reiniciar.
+`API_DEMO_SEED` só define o modo na criação do banco. Reiniciar com outra configuração não mistura nem substitui dados: use arquivos separados para testes e operação. Um banco operacional novo começa com apenas o administrador; o GPS pode registrar o turno do entregador cadastrado, enquanto pedidos e rotas viárias precisam das próximas etapas. O banco demonstrativo mantém os rótulos de simulação ao reiniciar.
 
 ## Operação do servidor
 
@@ -68,4 +68,4 @@ Publique por proxy HTTPS, mantendo a API e a interface na mesma origem. Para And
 
 ## Validação
 
-`npm test` executa testes HTTP reais com bancos temporários: autenticação, expiração/revogação, isolamento de dados, permissões, persistência, concorrência e entrega compartilhada. Os testes do cliente verificam respostas obsoletas, falhas de rede, conflitos e ausência de alterações otimistas. `npm run check` verifica tipos do servidor e frontend.
+`npm test` executa testes HTTP reais com bancos temporários: autenticação, expiração/revogação, isolamento de dados, permissões, persistência, concorrência e entrega compartilhada. Os testes do cliente verificam respostas obsoletas, falhas de rede, conflitos, permissão GPS pendente após logout e isolamento da fila. Os testes GPS validam pontos, deduplicação, relógio, lacunas e distribuição diária. Veja [os endpoints GPS e seus limites](GPS.md). `npm run check` verifica tipos do servidor e frontend.

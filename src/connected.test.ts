@@ -4,7 +4,11 @@ import { createDemoState } from './demo';
 import type { AppState, AppUser } from './types';
 
 const native = vi.hoisted(() => ({ value: false }));
-vi.mock('@capacitor/core', () => ({ Capacitor: { isNativePlatform: () => native.value } }));
+const gps = vi.hoisted(() => ({
+  getDeviceId: vi.fn(), start: vi.fn(), stop: vi.fn(), getStatus: vi.fn(), sync: vi.fn(),
+}));
+vi.mock('@capacitor/core', () => ({ Capacitor: { isNativePlatform: () => native.value, getPlatform: () => native.value ? 'android' : 'web' } }));
+vi.mock('./tracking/native', () => ({ RotaTracking: gps }));
 
 class MemoryStorage {
   values = new Map<string, string>();
@@ -33,6 +37,9 @@ beforeEach(() => {
   vi.stubGlobal('document', { visibilityState: 'visible' });
   vi.stubEnv('VITE_API_URL', '');
   fetchMock = vi.fn<typeof fetch>(); vi.stubGlobal('fetch', fetchMock);
+  Object.values(gps).forEach(mock => mock.mockReset());
+  gps.getDeviceId.mockResolvedValue({ deviceId: 'android-device' });
+  for (const method of [gps.start, gps.stop, gps.getStatus, gps.sync]) method.mockResolvedValue({ running: false, pending: 0, dropped: 0, error: '' });
 });
 afterEach(() => {
   for (const client of clients.splice(0)) client.stop();
@@ -192,5 +199,259 @@ describe('Alterações confirmadas pelo servidor', () => {
     fetchMock.mockRejectedValueOnce(new TypeError('Offline'));
     await client.logout();
     expect(client.getSnapshot().state).toBeNull();
+  });
+});
+
+const driverUser = () => seed().users.find(item => item.role === 'driver')!;
+const realStateResponse = (state = seed(), revision = 0) => response({ state, revision, simulation: false });
+const trackingSession = () => ({ id: 'gps-session', driverId: driverUser().driverId!, deviceId: 'android-device', startedAt: '2026-10-13T14:00:00Z', meters: 0, acceptedPoints: 0, rejectedPoints: 0, gaps: 0 });
+const realStartResponse = (state = seed(), revision = 1) => {
+  const session = trackingSession();
+  return response({ state: { ...state, trackingSessions: [...(state.trackingSessions ?? []).filter(item => item.id !== session.id), session] },
+    revision, simulation: false, trackingSession: session });
+};
+async function signInProduction(client: ConnectedClient, account = driverUser(), state = seed()) {
+  native.value = true;
+  fetchMock.mockResolvedValueOnce(auth(account)).mockResolvedValueOnce(realStateResponse(state));
+  expect(await client.login(account.email, 'private-password', 'https://api.example.com/rota')).toBe(true);
+  gps.stop.mockClear();
+}
+
+describe('GPS Android conectado', () => {
+  it('não ativa captura no login e entrega credenciais somente à camada nativa', async () => {
+    const { client } = makeClient(); await signInProduction(client);
+    expect(gps.start).not.toHaveBeenCalled();
+    fetchMock.mockResolvedValueOnce(realStateResponse());
+    await client.syncTracking();
+    expect(gps.sync).toHaveBeenCalledWith({ apiUrl: 'https://api.example.com/rota', token: 'opaque-session-token', userId: driverUser().id, driverId: driverUser().driverId, expiresAt: '2099-01-01T00:00:00Z' });
+    expect(JSON.stringify(client.getSnapshot())).not.toContain('opaque-session-token');
+    expect([...local.values.values()].join()).not.toContain('opaque-session-token');
+  });
+  it('bloqueia GPS no navegador, em demonstração e para administrador', async () => {
+    const web = makeClient().client; await signIn(web, driverUser());
+    await expect(web.startTracking()).rejects.toThrow('Android');
+    const simulated = makeClient().client;
+    native.value = true;
+    fetchMock.mockResolvedValueOnce(auth(driverUser())).mockResolvedValueOnce(stateResponse());
+    expect(await simulated.login(driverUser().email, 'private-password', 'https://api.example.com')).toBe(true);
+    await expect(simulated.startTracking()).rejects.toThrow('Android');
+    const admin = makeClient().client; await signInProduction(admin, seed().users[0]);
+    await expect(admin.startTracking()).rejects.toThrow('entregador');
+    expect(gps.getDeviceId).not.toHaveBeenCalled();
+  });
+  it('exige turno ativo antes de criar sessão de GPS', async () => {
+    const state = seed(); state.drivers.find(item => item.id === driverUser().driverId)!.status = 'offline';
+    const { client } = makeClient(); await signInProduction(client, driverUser(), state);
+    await expect(client.startTracking()).rejects.toThrow('turno');
+    expect(gps.getDeviceId).not.toHaveBeenCalled();
+    expect(fetchMock.mock.calls.length).toBe(2);
+  });
+  it('cria sessão do aparelho no servidor antes da captura e incorpora a revisão', async () => {
+    const { client } = makeClient(); await signInProduction(client);
+    const updated = seed(); updated.gpsDays = [{ driverId: driverUser().driverId!, date: '2026-10-13', meters: 200, acceptedPoints: 3, gaps: 0 }];
+    fetchMock.mockResolvedValueOnce(realStartResponse(updated, 3));
+    gps.start.mockResolvedValueOnce({ running: true, sessionId: 'gps-session', pending: 0, dropped: 0, error: '' });
+    expect((await client.startTracking()).running).toBe(true);
+    expect(fetchMock.mock.calls[2][0]).toBe('https://api.example.com/rota/api/tracking/start');
+    expect(JSON.parse(fetchMock.mock.calls[2][1]?.body as string)).toEqual({ deviceId: 'android-device' });
+    expect(gps.start).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'gps-session', driverId: driverUser().driverId, deviceId: 'android-device', token: 'opaque-session-token' }));
+    expect(client.getSnapshot().state?.gpsDays?.[0].meters).toBe(200);
+    fetchMock.mockResolvedValueOnce(realStateResponse(updated, 4));
+    expect(await client.actions.startRoute('e1', driverUser().driverId!)).toBe(true);
+    expect(JSON.parse(fetchMock.mock.calls[3][1]?.body as string).revision).toBe(3);
+  });
+  it('encerra sessão vazia se a permissão de localização for recusada', async () => {
+    const { client } = makeClient(); await signInProduction(client);
+    fetchMock.mockResolvedValueOnce(realStartResponse()).mockResolvedValueOnce(realStateResponse(seed(), 2));
+    gps.start.mockRejectedValueOnce(new Error('Permita o acesso à localização.'));
+    await expect(client.startTracking()).rejects.toThrow('localização');
+    expect(fetchMock.mock.calls[3][0]).toBe('https://api.example.com/rota/api/tracking/stop');
+    expect(JSON.parse(fetchMock.mock.calls[3][1]?.body as string)).toEqual({ sessionId: 'gps-session' });
+    expect(client.getSnapshot().status).toBe('ready');
+    expect(client.getSnapshot().state).not.toBeNull();
+  });
+  it('preserva o erro de permissão retornado pelo serviço sem captura', async () => {
+    const { client } = makeClient(); await signInProduction(client);
+    fetchMock.mockResolvedValueOnce(realStartResponse()).mockResolvedValueOnce(realStateResponse(seed(), 2));
+    gps.start.mockResolvedValueOnce({ running: false, pending: 0, dropped: 0, error: 'Ative a localização precisa.' });
+    expect((await client.startTracking()).error).toBe('Ative a localização precisa.');
+    expect(gps.stop).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[3][0]).toContain('/api/tracking/stop');
+  });
+  it('deixa a fila nativa confirmar os pontos antes de encerrar a sessão', async () => {
+    const { client } = makeClient(); await signInProduction(client);
+    const pending = deferred<ReturnType<typeof gps.stop>>();
+    gps.stop.mockReturnValueOnce(pending.promise);
+    fetchMock.mockResolvedValueOnce(realStateResponse(seed(), 1));
+    const stopping = client.stopTracking();
+    expect(fetchMock.mock.calls.length).toBe(2);
+    pending.resolve({ running: false, pending: 12, dropped: 0, error: 'Sem conexão.' });
+    expect((await stopping).pending).toBe(12);
+    expect(fetchMock.mock.calls.map(([url]) => String(url)).some(url => url.endsWith('/api/tracking/stop'))).toBe(false);
+    expect(client.getSnapshot().syncing).toBe(false);
+  });
+  it('limpa a tela na saída e aguarda a última tentativa nativa antes de revogar o token', async () => {
+    const { client } = makeClient(); await signInProduction(client);
+    const pending = deferred<unknown>(); gps.stop.mockReturnValueOnce(pending.promise);
+    fetchMock.mockResolvedValueOnce(response(null, 204));
+    const logout = client.logout();
+    expect(client.getSnapshot().user).toBeNull();
+    expect(session.values.size).toBe(0);
+    expect(fetchMock.mock.calls.length).toBe(2);
+    pending.resolve({ running: false, pending: 4, dropped: 0, error: 'Sem conexão.' });
+    await logout;
+    expect(fetchMock.mock.calls[2][0]).toContain('/api/auth/logout');
+  });
+  it('mantém saída disponível se o plugin nativo não resolver em dez segundos', async () => {
+    vi.useFakeTimers();
+    const { client } = makeClient(); await signInProduction(client);
+    gps.stop.mockReturnValueOnce(new Promise(() => {}));
+    fetchMock.mockResolvedValueOnce(response(null, 204));
+    const logout = client.logout();
+    await vi.advanceTimersByTimeAsync(10_000); await logout;
+    expect(client.getSnapshot().status).toBe('signed-out');
+    expect(fetchMock.mock.calls[2][0]).toContain('/api/auth/logout');
+  });
+  it('para captura quando a conta é desativada ou muda de função', async () => {
+    const { client } = makeClient(); await signInProduction(client);
+    const changed = seed(); changed.users.find(item => item.id === driverUser().id)!.role = 'manager';
+    fetchMock.mockResolvedValueOnce(realStateResponse(changed, 1)); await client.refresh();
+    expect(gps.stop).toHaveBeenCalledOnce();
+    expect(client.getSnapshot().user?.role).toBe('manager');
+    const inactive = seed(); inactive.users.find(item => item.id === driverUser().id)!.active = false;
+    fetchMock.mockResolvedValueOnce(realStateResponse(inactive, 2)); await client.refresh();
+    expect(gps.stop).toHaveBeenCalledTimes(2);
+    expect(client.getSnapshot().status).toBe('signed-out');
+  });
+  it('para captura no vencimento local da sessão sem depender da rede', async () => {
+    vi.useFakeTimers();
+    const { client } = makeClient(); native.value = true;
+    fetchMock.mockResolvedValueOnce(response({ user: driverUser(), token: 'short-token', expiresAt: new Date(Date.now() + 1_000).toISOString() })).mockResolvedValueOnce(realStateResponse());
+    expect(await client.login(driverUser().email, 'private-password', 'https://api.example.com')).toBe(true);
+    gps.stop.mockClear();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(gps.stop).toHaveBeenCalledOnce();
+    expect(client.getSnapshot().status).toBe('signed-out');
+    expect(session.values.size).toBe(0);
+  });
+  it('descarta criação tardia de GPS quando a conta mudou', async () => {
+    const { client } = makeClient(); await signInProduction(client);
+    const pending = deferred<Response>(); fetchMock.mockReturnValueOnce(pending.promise);
+    const starting = client.startTracking(); await Promise.resolve();
+    fetchMock.mockResolvedValueOnce(response(null, 204)); await client.logout();
+    pending.resolve(realStartResponse(seed(), 99));
+    await expect(starting).rejects.toThrow('sessão mudou');
+    expect(gps.start).not.toHaveBeenCalled();
+    expect(client.getSnapshot().state).toBeNull();
+  });
+  it('não ativa GPS com resposta atrasada após conhecer o encerramento do turno', async () => {
+    const { client } = makeClient(); await signInProduction(client);
+    const pending = deferred<Response>();
+    fetchMock.mockReturnValueOnce(pending.promise);
+    gps.start.mockResolvedValueOnce({ running: true, sessionId: 'gps-session', pending: 0, dropped: 0, error: '' });
+    const starting = client.startTracking();
+    await vi.waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/api/tracking/start'))).toBe(true));
+
+    const stopped = seed();
+    const driver = stopped.drivers.find(item => item.id === driverUser().driverId)!;
+    driver.status = 'offline'; driver.shiftStartedAt = null;
+    stopped.trackingSessions = [{ ...trackingSession(), endedAt: '2026-10-13T14:01:00Z' }];
+    fetchMock.mockResolvedValueOnce(realStateResponse(stopped, 2));
+    await client.refresh();
+    fetchMock.mockResolvedValueOnce(realStateResponse(stopped, 3));
+    pending.resolve(realStartResponse(seed(), 1));
+
+    await expect(starting).rejects.toThrow(/turno|encerrad/i);
+    expect(gps.start).not.toHaveBeenCalled();
+  });
+  it.each([false, true])('fecha a sessão durante o diálogo e ignora ativação tardia running=%s após sair', async running => {
+    const { client } = makeClient(); await signInProduction(client);
+    const permission = deferred<unknown>();
+    gps.start.mockReturnValueOnce(permission.promise);
+    fetchMock.mockResolvedValueOnce(realStartResponse());
+    const starting = client.startTracking();
+    await vi.waitFor(() => expect(gps.start).toHaveBeenCalledOnce());
+    fetchMock.mockResolvedValueOnce(realStateResponse(seed(), 99)).mockResolvedValueOnce(response(null, 204));
+    await client.logout();
+    expect(fetchMock.mock.calls.slice(3).map(([url]) => String(url))).toEqual([
+      'https://api.example.com/rota/api/tracking/stop', 'https://api.example.com/rota/api/auth/logout',
+    ]);
+    expect(JSON.parse(fetchMock.mock.calls[3][1]?.body as string)).toEqual({ sessionId: 'gps-session' });
+    expect(client.getSnapshot().state).toBeNull();
+    permission.resolve({ running, pending: 0, dropped: 0, error: '' });
+    await expect(starting).rejects.toThrow('sessão mudou');
+    expect(client.getSnapshot()).toMatchObject({ user: null, state: null, status: 'signed-out' });
+    expect(session.values.size).toBe(0);
+    expect(gps.start).toHaveBeenCalledOnce();
+    await expect(client.getTrackingStatus()).rejects.toThrow('Android');
+    expect(gps.getStatus).not.toHaveBeenCalled();
+  });
+  it('não fecha a sessão antes de confirmar pontos capturados durante uma ativação pendente', async () => {
+    const { client } = makeClient(); await signInProduction(client);
+    const permission = deferred<unknown>();
+    gps.start.mockReturnValueOnce(permission.promise);
+    fetchMock.mockResolvedValueOnce(realStartResponse());
+    const starting = client.startTracking();
+    await vi.waitFor(() => expect(gps.start).toHaveBeenCalledOnce());
+    gps.stop.mockResolvedValueOnce({ running: false, pending: 5, dropped: 0, error: 'Sem conexão.' });
+    fetchMock.mockResolvedValueOnce(response(null, 204));
+    await client.logout();
+    expect(fetchMock.mock.calls.map(([url]) => String(url)).some(url => url.endsWith('/api/tracking/stop'))).toBe(false);
+    permission.resolve({ running: false, pending: 5, dropped: 0, error: '' });
+    await expect(starting).rejects.toThrow('sessão mudou');
+  });
+  it('não deixa uma permissão tardia misturar dados nem credenciais de uma nova conta', async () => {
+    const { client } = makeClient(); await signInProduction(client);
+    const permission = deferred<unknown>();
+    gps.start.mockReturnValueOnce(permission.promise);
+    fetchMock.mockResolvedValueOnce(realStartResponse());
+    const starting = client.startTracking();
+    await vi.waitFor(() => expect(gps.start).toHaveBeenCalledOnce());
+    fetchMock.mockResolvedValueOnce(realStateResponse(seed(), 2)).mockResolvedValueOnce(response(null, 204));
+    await client.logout();
+    const nextUser = seed().users.find(item => item.role === 'driver' && item.id !== driverUser().id)!;
+    fetchMock.mockResolvedValueOnce(auth(nextUser, 'new-account-token')).mockResolvedValueOnce(realStateResponse());
+    expect(await client.login(nextUser.email, 'private-password', 'https://api.example.com/rota')).toBe(true);
+    permission.resolve({ running: true, pending: 0, dropped: 0, error: '' });
+    await expect(starting).rejects.toThrow('sessão mudou');
+    expect(client.getSnapshot().user?.id).toBe(nextUser.id);
+    fetchMock.mockResolvedValueOnce(realStateResponse()); await client.syncTracking();
+    expect(gps.sync).toHaveBeenLastCalledWith(expect.objectContaining({ token: 'new-account-token', userId: nextUser.id, driverId: nextUser.driverId }));
+    expect([...session.values.values()].join()).not.toContain('opaque-session-token');
+  });
+  it('sincroniza uma sessão com fechamento pendente antes de permitir outra captura', async () => {
+    const { client } = makeClient(); await signInProduction(client);
+    fetchMock.mockResolvedValueOnce(realStartResponse()).mockResolvedValueOnce(realStateResponse(seed(), 2));
+    gps.start.mockRejectedValueOnce(Object.assign(new Error('Pontos pendentes.'), { code: 'GPS_PENDING' }));
+    gps.sync.mockResolvedValueOnce({ running: false, pending: 3, dropped: 0, error: 'Sem conexão.' });
+    await expect(client.startTracking()).rejects.toThrow('Envie os pontos pendentes');
+    expect(gps.sync).toHaveBeenCalledOnce();
+    expect(gps.stop).not.toHaveBeenCalled();
+    expect(fetchMock.mock.calls.map(([url]) => String(url)).some(url => url.endsWith('/api/tracking/stop'))).toBe(false);
+    expect(client.getSnapshot().status).toBe('ready');
+  });
+  it('não bloqueia alterações enquanto consulta apenas o estado do GPS', async () => {
+    const { client } = makeClient(); await signInProduction(client);
+    const pending = deferred<unknown>(); gps.getStatus.mockReturnValueOnce(pending.promise);
+    const reading = client.getTrackingStatus();
+    expect(client.getSnapshot().syncing).toBe(false);
+    pending.resolve({ running: true, pending: 5, dropped: 0, error: '' }); await reading;
+    const remote = deferred<Response>(); fetchMock.mockReturnValueOnce(remote.promise);
+    gps.getStatus.mockResolvedValueOnce({ running: true, pending: 0, dropped: 0, error: '' });
+    await client.getTrackingStatus();
+    expect(client.getSnapshot().syncing).toBe(false);
+    remote.resolve(realStateResponse(seed(), 1)); await Promise.resolve();
+  });
+  it('valida coordenadas e totais de GPS antes de substituir os dados', async () => {
+    const { client } = makeClient(); await signInProduction(client);
+    const valid = seed(); valid.drivers[0].gps = { id: 'gps-point', latitude: -23.55, longitude: -46.63, accuracy: 8, recordedAt: '2026-10-13T15:00:00Z', receivedAt: '2026-10-13T15:00:01Z' };
+    valid.trackingSessions = [trackingSession()];
+    valid.gpsDays = [{ driverId: valid.drivers[0].id, date: '2026-10-13', meters: 120, acceptedPoints: 3, gaps: 0 }];
+    fetchMock.mockResolvedValueOnce(realStateResponse(valid, 1)); await client.refresh();
+    expect(client.getSnapshot().state?.drivers[0].gps?.latitude).toBe(-23.55);
+    const invalid: AppState = structuredClone(valid); invalid.drivers[0].gps!.latitude = 120;
+    fetchMock.mockResolvedValueOnce(realStateResponse(invalid, 2)); await client.refresh();
+    expect(client.getSnapshot().state?.drivers[0].gps?.latitude).toBe(-23.55);
+    expect(client.getSnapshot().error).toContain('incompatíveis');
   });
 });

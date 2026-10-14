@@ -1,0 +1,21 @@
+.gps-map { position: relative; width: 100%; height: 100%; min-height: 230px; background: #edf1ec; overflow: hidden; isolation: isolate; }
+.gps-map-canvas { width: 100%; height: 100%; min-height: inherit; z-index: 0; font-family: inherit; }
+.gps-map .leaflet-container { background: #edf1ec; font-family: inherit; }
+.gps-map .leaflet-control-container { display: none; }
+.gps-map .leaflet-tooltip { max-width: 240px; white-space: normal; font: 12px/1.5 inherit; }
+.gps-map-marker-wrap { background: transparent; border: 0; }
+.gps-map-marker { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 8px #19271945; color: #fff; font-size: 12px; font-weight: 700; }
+.gps-map-marker.is-selected { outline: 5px solid #7985d94a; }
+.gps-map-marker.is-stale { filter: grayscale(1); }
+.gps-map-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 30px; text-align: center; color: #697d69; background: repeating-linear-gradient(135deg, #edf1ec, #edf1ec 22px, #e8ede6 22px, #e8ede6 23px); }
+.gps-map-empty strong { font-size: 15px; margin-top: 12px; }
+.gps-map-empty p { max-width: 300px; font-size: 12px; line-height: 1.7; margin-top: 8px; }
+.gps-map-loading { position: absolute; inset: 0; display: grid; place-items: center; color: #61715c; font-size: 13px; }
+.gps-map-error { position: absolute; top: 12px; left: 12px; right: 65px; padding: 9px 12px; border-radius: 7px; background: #fffcf1ed; color: #6f643e; font-size: 11px; line-height: 1.5; z-index: 800; }
+.gps-map-controls { position: absolute; top: 14px; right: 14px; display: flex; flex-direction: column; border: 1px solid #dbe3d7; border-radius: 9px; overflow: hidden; box-shadow: 0 2px 8px #263c2420; z-index: 800; }
+.gps-map-controls button { display: grid; place-items: center; width: 40px; height: 42px; background: #fff; color: #53684c; border: 0; border-bottom: 1px solid #e5eadd; cursor: pointer; }
+.gps-map-controls button:last-child { border-bottom: 0; }
+.gps-map-controls button:focus-visible { outline: 3px solid #7765dc; outline-offset: -3px; }
+.gps-map-attribution { position: absolute; right: 0; bottom: 0; max-width: 100%; padding: 3px 6px; background: #ffffffed; color: #5c6b59; font-size: 10px; line-height: 1.45; z-index: 800; }
+.gps-map-attribution a { color: #3b5947; text-decoration: underline; }
+.gps-map--compact { min-height: 210px; }

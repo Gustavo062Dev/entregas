@@ -2,6 +2,14 @@ export type DeliveryStatus = 'pending' | 'in_transit' | 'delivered';
 export type DriverStatus = 'available' | 'on_route' | 'offline';
 export type Section = 'overview' | 'deliveries' | 'reports' | 'users';
 export interface Position { x: number; y: number }
+export interface GpsPoint { id: string; latitude: number; longitude: number; accuracy: number; recordedAt: string }
+export interface GpsLocation extends GpsPoint { receivedAt: string }
+export interface TrackingSession {
+  id: string; driverId: string; deviceId: string; startedAt: string; endedAt?: string;
+  meters: number; acceptedPoints: number; rejectedPoints: number; gaps: number;
+  lastPoint?: GpsPoint; anchor?: GpsPoint;
+}
+export interface GpsDay { driverId: string; date: string; meters: number; acceptedPoints: number; gaps: number }
 export interface Driver {
   id: string;
   name: string;
@@ -13,6 +21,7 @@ export interface Driver {
   position: Position;
   kmToday: number;
   shiftStartedAt: string | null;
+  gps?: GpsLocation;
 }
 export interface Delivery {
   id: string;
@@ -39,6 +48,8 @@ export interface Trip {
   date: string;
   km: number;
   progress: number;
+  distanceSource?: 'gps' | 'simulation';
+  distanceMeters?: number;
 }
 export interface AppUser {
   id: string;
@@ -55,6 +66,16 @@ export interface AppState {
   deliveries: Delivery[];
   trips: Trip[];
   users: AppUser[];
+  trackingSessions?: TrackingSession[];
+  gpsDays?: GpsDay[];
+}
+export interface TrackingStatus {
+  running: boolean; pending: number; dropped: number; sessionId?: string;
+  lastPoint?: GpsPoint; error: string; permission?: string;
+}
+export interface TrackingControls {
+  status: TrackingStatus; busy: boolean; enabled: boolean;
+  start: () => Promise<void>; stop: () => Promise<void>; retry: () => Promise<void>;
 }
 export interface AppActions {
   assignDelivery: (deliveryId: string, driverId: string | null) => boolean | Promise<boolean>;
@@ -74,6 +95,7 @@ export interface ConnectedAccess {
   error: string;
   refresh: () => void | Promise<void>;
   simulation: boolean;
+  tracking?: TrackingControls;
 }
 export interface ScreenProps { state: AppState; actions: AppActions; access?: ConnectedAccess }
 export const deliveryStatusLabel: Record<DeliveryStatus, string> = {

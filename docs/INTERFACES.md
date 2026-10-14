@@ -4,11 +4,11 @@
 
 O painel começa pelo login de administrador ou gestor. O aplicativo Android e `/entregador` começam pelo login de entregador. Um perfil de entregador não abre o painel, e um perfil administrativo precisa entrar com a conta de entregador para testar o app. O servidor limita os dados e ações de cada conta.
 
-No painel, **Visão geral** reúne indicadores, mapa ilustrativo e equipe. **Entregas** permite buscar, filtrar e atribuir pedidos pendentes. **Relatórios** filtra viagens por data/entregador e exporta CSV, preservando acentos e tratando fórmulas de planilha. As posições e distâncias permanecem demonstrativas; GPS está pendente.
+No painel, **Visão geral** reúne indicadores, mapa e equipe. **Entregas** permite buscar, filtrar e atribuir pedidos pendentes. **Relatórios** filtra viagens por data/entregador e exporta CSV, preservando acentos e tratando fórmulas de planilha. Na operação real, o mapa mostra as posições GPS recebidas e os relatórios incluem a distância estimada durante todo o turno. Em bancos demonstrativos, posições e distâncias continuam simuladas.
 
 **Usuários** aparece apenas para o administrador: cadastro, edição, ativação e redefinição de senha. Novas contas exigem senha de 12–128 caracteres. Um novo entregador recebe um perfil próprio; não usa a identidade de outro usuário. O último administrador ativo é preservado, e um entregador em rota precisa concluir a entrega antes de ser desativado.
 
-No aplicativo, **Minha rota** apresenta turno, pedido e navegação interna demonstrativa. **Entregas** lista somente pedidos atribuídos ao usuário. **Histórico** apresenta suas viagens. **Perfil** mostra a identidade autenticada e permite sair; não oferece troca arbitrária de entregador.
+No aplicativo, **Minha rota** apresenta turno, ativação/parada do GPS, fila pendente, mapa e entrega. Na operação real, a confirmação é manual com nome do recebedor; não há instruções fictícias de curva. Bancos demonstrativos mantêm navegação simulada. **Entregas** lista somente pedidos atribuídos ao usuário. **Histórico** apresenta suas viagens. **Perfil** mostra a identidade autenticada e permite sair; não oferece troca arbitrária de entregador.
 
 As alterações esperam confirmação do servidor. Falhas de conexão exibem aviso e bloqueiam alterações até sincronizar novamente; conflitos não são sobrescritos silenciosamente. O painel consulta atualizações a cada cinco segundos quando está visível.
 
@@ -21,7 +21,7 @@ As alterações esperam confirmação do servidor. Falhas de conexão exibem avi
 5. Confira a atualização do status e quilômetros no painel e exporte o relatório.
 6. Cadastre um usuário com senha, teste seu perfil, saia e tente acessar novamente após desativação.
 
-O mesmo fluxo usa a API compartilhada no Android quando o aparelho alcança o servidor HTTPS. A validação em aparelho físico ainda está pendente. Em banco operacional sem dados fictícios, não há avanço de simulação; GPS e entrada de pedidos serão desenvolvidos em etapas seguintes.
+O mesmo fluxo usa a API compartilhada no Android quando o aparelho alcança o servidor HTTPS. A validação em aparelho físico ainda está pendente. Em banco operacional sem dados fictícios, não há avanço de simulação. Inicie o turno no Android e ative o GPS para acompanhar a posição no painel. Entrada de pedidos e navegação viária ficam para as próximas etapas. Veja [GPS.md](GPS.md).
 
 ## Teste de interface conectado
 
@@ -42,3 +42,7 @@ O roteiro valida login, criação de usuário, isolamento de perfis, entrega com
 `scripts/ui-smoke.py` valida essa demonstração. Sirva o HTML único por HTTP e informe o endereço terminado em `/index.html` com `UI_SMOKE_URL`; alternativamente, inicie o Vite com `--mode portable` e use o endereço local. `UI_SMOKE_OUTPUT` permite separar os artefatos; `CHROMIUM_EXECUTABLE` seleciona Chromium.
 
 As credenciais e os dados do sistema conectado não são compartilhados com essa prévia.
+
+## Teste da operação GPS
+
+`scripts/gps-smoke.py` usa um banco operacional novo, dois contextos isolados e pontos sintéticos enviados à API real. O cadastro do entregador e o turno passam pela interface. O roteiro verifica posição, distância, CSV, reenvio, privacidade e logout; somente imagens externas do mapa usam uma fixture, declarada no relatório. Isso não comprova captura física Android. Configure `UI_SMOKE_URL`, `UI_SMOKE_OUTPUT` e as contas `QA_ADMIN_*` / `QA_DRIVER_*` quando necessário.

@@ -5,7 +5,8 @@ import { transition, type Command } from '../src/domain.ts';
 import type { AppState, AppUser } from '../src/types.ts';
 import { HttpError } from './errors.ts';
 import { openRepository, type RepositoryOptions, type Snapshot } from './repository.ts';
-import { exactBody, normalizeEmail, validateCommand, validatePassword, validateUser } from './validation.ts';
+import { exactBody, normalizeEmail, validateCommand, validatePassword, validateTrackingPoints, validateTrackingStart, validateTrackingStop, validateUser } from './validation.ts';
+import { recordTrackingPoints, startTracking, stopTracking } from './tracking.ts';
 
 export interface ApiOptions extends RepositoryOptions {
   staticDir?: string;
@@ -48,12 +49,14 @@ function bearer(request: IncomingMessage) {
   return match[1];
 }
 
-function stateForUser(state: AppState, user: AppUser): AppState {
+function stateForUser(state: AppState, user: AppUser, ownsSession: (sessionId: string) => boolean): AppState {
   if (user.role !== 'driver') return state;
   return { ...state, users: state.users.filter(item => item.id === user.id),
     drivers: state.drivers.filter(driver => driver.id === user.driverId),
     deliveries: state.deliveries.filter(delivery => !!user.driverId && delivery.driverId === user.driverId),
-    trips: state.trips.filter(trip => !!user.driverId && trip.driverId === user.driverId) };
+    trips: state.trips.filter(trip => !!user.driverId && trip.driverId === user.driverId),
+    trackingSessions: (state.trackingSessions ?? []).filter(session => !!user.driverId && session.driverId === user.driverId && ownsSession(session.id)),
+    gpsDays: (state.gpsDays ?? []).filter(day => !!user.driverId && day.driverId === user.driverId) };
 }
 
 function authorizeCommand(command: Command, user: AppUser, state: AppState, demoSeed: boolean) {
@@ -133,7 +136,7 @@ export function createApiServer(options: ApiOptions = {}) {
   const checkLoginLimit = createLoginLimiter(now);
   const allowedOrigins = options.allowedOrigins ?? (process.env.ROTA_ALLOWED_ORIGINS ?? '').split(',').map(origin => origin.trim()).filter(Boolean);
   const staticDir = options.staticDir ?? (process.env.NODE_ENV === 'production' ? resolve('dist') : undefined);
-  const snapshotFor = (snapshot: Snapshot, user: AppUser) => ({ ...snapshot, state: stateForUser(snapshot.state, user), simulation: repository.demoSeed });
+  const snapshotFor = (snapshot: Snapshot, user: AppUser) => ({ ...snapshot, state: stateForUser(snapshot.state, user, sessionId => repository.trackingOwner(sessionId) === user.id), simulation: repository.demoSeed });
 
   const server = createServer(async (request, response) => {
     response.setHeader('X-Content-Type-Options', 'nosniff');
@@ -156,7 +159,7 @@ export function createApiServer(options: ApiOptions = {}) {
       }
       if (request.method === 'OPTIONS') {
         response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-        response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+        response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Rota-Tracking-Response');
         send(response, 204);
         return;
       }
@@ -176,6 +179,27 @@ export function createApiServer(options: ApiOptions = {}) {
         send(response, 200, snapshotFor(repository.read(), user));
         return;
       }
+      if (path === '/api/tracking/start' && request.method === 'POST') {
+        const body = validateTrackingStart(await readBody(request));
+        const { user } = repository.session(bearer(request));
+        const result = repository.mutateTracking(({ state }, receipts) => startTracking(state, user, repository.demoSeed, body.deviceId, now(), receipts));
+        send(response, 200, { ...snapshotFor(result, user), trackingSession: result.trackingSession });
+        return;
+      }
+      if (path === '/api/tracking/stop' && request.method === 'POST') {
+        const body = validateTrackingStop(await readBody(request));
+        const { user } = repository.session(bearer(request));
+        const result = repository.mutateTracking(({ state }, receipts) => stopTracking(state, user, repository.demoSeed, body.sessionId, body.stoppedAt, now(), receipts));
+        send(response, 200, { ...(request.headers['x-rota-tracking-response'] === 'compact' ? { revision: result.revision, simulation: repository.demoSeed } : snapshotFor(result, user)), trackingSession: result.trackingSession });
+        return;
+      }
+      if (path === '/api/tracking/points' && request.method === 'POST') {
+        const body = validateTrackingPoints(await readBody(request));
+        const { user } = repository.session(bearer(request));
+        const result = repository.mutateTracking(({ state }, receipts) => recordTrackingPoints(state, user, repository.demoSeed, body.sessionId, body.points, receipts, now()));
+        send(response, 200, { ...(request.headers['x-rota-tracking-response'] === 'compact' ? { revision: result.revision, simulation: repository.demoSeed } : snapshotFor(result, user)), ackIds: result.ackIds, accepted: result.accepted, rejected: result.rejected, duplicates: result.duplicates, active: result.active });
+        return;
+      }
       if (path === '/api/commands' && request.method === 'POST') {
         const body = exactBody(await readBody(request), ['command', 'revision']);
         const command = validateCommand(body.command);
@@ -183,7 +207,7 @@ export function createApiServer(options: ApiOptions = {}) {
         const { user } = repository.session(bearer(request));
         const result = repository.mutate(({ state }) => {
           authorizeCommand(command, user, state, repository.demoSeed);
-          return transition(state, command, new Date(now()).toISOString());
+          return transition(state, command, new Date(now()).toISOString(), { simulation: repository.demoSeed });
         }, body.revision as number);
         send(response, 200, { ...snapshotFor(result, user), message: result.message });
         return;

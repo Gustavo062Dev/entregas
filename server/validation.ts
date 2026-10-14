@@ -1,5 +1,5 @@
 import type { Command } from '../src/domain.ts';
-import type { AppUser } from '../src/types.ts';
+import type { AppUser, GpsPoint } from '../src/types.ts';
 import { HttpError } from './errors.ts';
 
 export function record(value: unknown): value is Record<string, unknown> {
@@ -12,6 +12,49 @@ function keys(value: Record<string, unknown>, required: string[], optional: stri
 
 function id(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= 128 && !/[\s\u0000-\u001f\u007f]/.test(value);
+}
+
+function isoTimestamp(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,3})?(?:Z|([+-])(\d{2}):(\d{2}))$/.exec(value);
+  if (!match || !Number.isFinite(Date.parse(value))) return false;
+  const [, year, month, day, hour, minute, second, , offsetHour, offsetMinute] = match;
+  const daysInMonth = new Date(Date.UTC(Number(year), Number(month), 0)).getUTCDate();
+  return Number(month) >= 1 && Number(month) <= 12 && Number(day) >= 1 && Number(day) <= daysInMonth
+    && Number(hour) <= 23 && Number(minute) <= 59 && Number(second) <= 59
+    && (offsetHour === undefined || (Number(offsetHour) <= 23 && Number(offsetMinute) <= 59));
+}
+
+export function validateTrackingStart(value: unknown): { deviceId: string } {
+  const body = exactBody(value, ['deviceId']);
+  if (!id(body.deviceId)) throw new HttpError(400, 'Informe um identificador válido do aparelho.');
+  return { deviceId: body.deviceId };
+}
+
+export function validateTrackingStop(value: unknown): { sessionId: string; stoppedAt?: string } {
+  const body = exactBody(value, ['sessionId'], ['stoppedAt']);
+  if (!id(body.sessionId) || (body.stoppedAt !== undefined && !isoTimestamp(body.stoppedAt))) {
+    throw new HttpError(400, 'Informe uma sessão e um horário de encerramento válidos.');
+  }
+  return { sessionId: body.sessionId, ...(body.stoppedAt === undefined ? {} : { stoppedAt: body.stoppedAt as string }) };
+}
+
+export function validateTrackingPoints(value: unknown): { sessionId: string; points: GpsPoint[] } {
+  const body = exactBody(value, ['sessionId', 'points']);
+  if (!id(body.sessionId) || !Array.isArray(body.points) || body.points.length < 1 || body.points.length > 100) {
+    throw new HttpError(400, 'Envie entre 1 e 100 posições para uma sessão válida.');
+  }
+  const points = body.points.map((point): GpsPoint => {
+    if (!record(point) || !keys(point, ['id', 'latitude', 'longitude', 'accuracy', 'recordedAt']) || !id(point.id)
+      || typeof point.latitude !== 'number' || !Number.isFinite(point.latitude) || point.latitude < -90 || point.latitude > 90
+      || typeof point.longitude !== 'number' || !Number.isFinite(point.longitude) || point.longitude < -180 || point.longitude > 180
+      || typeof point.accuracy !== 'number' || !Number.isFinite(point.accuracy) || point.accuracy < 0 || point.accuracy > 100_000
+      || !isoTimestamp(point.recordedAt)) {
+      throw new HttpError(400, 'Uma das posições contém coordenadas, precisão ou horário inválidos.');
+    }
+    return { id: point.id, latitude: point.latitude, longitude: point.longitude, accuracy: point.accuracy, recordedAt: point.recordedAt };
+  });
+  return { sessionId: body.sessionId, points };
 }
 
 export function normalizeEmail(value: unknown): string {

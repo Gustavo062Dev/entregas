@@ -11,7 +11,8 @@ export type Command =
   | { type: 'toggle-user'; id: string }
   | { type: 'reset' };
 
-export function transition(state: AppState, command: Command, now = new Date().toISOString()): { state: AppState; message: string } {
+export function transition(state: AppState, command: Command, now = new Date().toISOString(), options: { simulation?: boolean } = {}): { state: AppState; message: string } {
+  const simulation = options.simulation ?? true;
   const reject = (message: string) => ({ state, message });
   let next: AppState = structuredClone(state);
   next.demoDate = localDay(new Date(now));
@@ -35,11 +36,12 @@ export function transition(state: AppState, command: Command, now = new Date().t
       if (driver.status === 'offline') return reject('Inicie seu turno antes de sair para a entrega.');
       if (next.deliveries.some(d => d.driverId === driver.id && d.status === 'in_transit')) return reject('Conclua a rota atual antes de iniciar outra.');
       delivery.status = 'in_transit'; driver.status = 'on_route';
-      next.trips.push({ id: crypto.randomUUID(), driverId: driver.id, deliveryId: delivery.id, startedAt: now, date: next.demoDate, progress: 0, km: 0 });
-      message = 'Rota demonstrativa iniciada. Avance a simulação para percorrer o trajeto.';
+      next.trips.push({ id: crypto.randomUUID(), driverId: driver.id, deliveryId: delivery.id, startedAt: now, date: next.demoDate, progress: 0, km: 0, distanceSource: simulation ? 'simulation' : 'gps', ...(!simulation ? { distanceMeters: 0 } : {}) });
+      message = simulation ? 'Rota demonstrativa iniciada. Avance a simulação para percorrer o trajeto.' : 'Entrega iniciada. Ative o GPS durante o turno para registrar a distância.';
       break;
     }
     case 'advance': {
+      if (!simulation) return reject('O avanço simulado não está disponível na operação por GPS.');
       const delivery = next.deliveries.find(d => d.id === command.deliveryId);
       const trip = next.trips.find(t => t.deliveryId === command.deliveryId && !t.finishedAt);
       if (!delivery || delivery.status !== 'in_transit' || !trip) return reject('Inicie uma rota para simular o percurso.');
@@ -59,10 +61,10 @@ export function transition(state: AppState, command: Command, now = new Date().t
       const trip = next.trips.find(t => t.deliveryId === command.deliveryId && !t.finishedAt);
       if (!delivery || delivery.status !== 'in_transit' || !trip) return reject('Esta entrega não possui uma rota em andamento.');
       if (!active(trip.driverId)) return reject('O usuário deste entregador está desativado.');
-      if (trip.progress !== 1) return reject('Complete o percurso demonstrativo antes de confirmar a entrega.');
+      if (simulation && trip.progress !== 1) return reject('Complete o percurso demonstrativo antes de confirmar a entrega.');
       const receivedBy = command.receivedBy.trim();
       if (!receivedBy || receivedBy.length > 120) return reject('Informe o nome de quem recebeu, com até 120 caracteres.');
-      delivery.status = 'delivered'; delivery.deliveredAt = now; delivery.receivedBy = receivedBy; trip.finishedAt = now;
+      delivery.status = 'delivered'; delivery.deliveredAt = now; delivery.receivedBy = receivedBy; trip.finishedAt = now; trip.progress = 1;
       next.drivers.find(d => d.id === trip.driverId)!.status = 'available';
       message = 'Entrega confirmada. Bom trabalho!';
       break;
@@ -72,6 +74,7 @@ export function transition(state: AppState, command: Command, now = new Date().t
       if (!driver) return reject('Entregador não encontrado.');
       if (!active(driver.id)) return reject('O usuário deste entregador está desativado.');
       if (next.deliveries.some(d => d.driverId === driver.id && d.status === 'in_transit')) return reject('Conclua a entrega em andamento antes de encerrar o turno.');
+      if (command.online && driver.status !== 'offline') return reject('Seu turno já está em andamento.');
       driver.status = command.online ? 'available' : 'offline';
       driver.shiftStartedAt = command.online ? now : null;
       message = command.online ? 'Turno iniciado.' : 'Turno encerrado.';

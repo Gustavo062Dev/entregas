@@ -6,6 +6,7 @@ import { createDemoState, deriveState, localDay } from '../src/demo.ts';
 import type { AppState, AppUser } from '../src/types.ts';
 import { HttpError } from './errors.ts';
 import { normalizeEmail, validatePassword } from './validation.ts';
+import { closeUnavailableTracking, type PointReceipts } from './tracking.ts';
 
 export interface RepositoryOptions {
   databasePath?: string;
@@ -51,7 +52,10 @@ export class Repository {
       CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS credentials (user_id TEXT PRIMARY KEY, salt TEXT NOT NULL, password_hash TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES credentials(user_id) ON DELETE CASCADE, expires_at INTEGER NOT NULL);
-      CREATE INDEX IF NOT EXISTS session_expiry ON sessions(expires_at);`);
+      CREATE INDEX IF NOT EXISTS session_expiry ON sessions(expires_at);
+      CREATE TABLE IF NOT EXISTS tracking_owners (session_id TEXT PRIMARY KEY, user_id TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS tracking_receipts (session_id TEXT NOT NULL, point_id TEXT NOT NULL, payload_hash TEXT NOT NULL,
+        PRIMARY KEY(session_id, point_id));`);
     try {
       if (!this.db.prepare('SELECT id FROM app_state WHERE id = 1').get()) this.initialize(options);
       const mode = this.db.prepare("SELECT value FROM metadata WHERE key = 'simulation'").get() as { value: string } | undefined;
@@ -67,7 +71,7 @@ export class Repository {
     if (!name || name.length > 100 || /[\u0000-\u001f\u007f]/.test(name)) throw new HttpError(400, 'ROTA_ADMIN_NAME inválido.');
     const admin: AppUser = { id: randomUUID(), name, email, role: 'admin', active: true };
     const state: AppState = this.demoSeed ? createDemoState(localDay(new Date(this.now())))
-      : { version: 1, demoDate: localDay(new Date(this.now())), drivers: [], deliveries: [], trips: [], users: [] };
+      : { version: 1, demoDate: localDay(new Date(this.now())), drivers: [], deliveries: [], trips: [], users: [], trackingSessions: [], gpsDays: [] };
     if (this.demoSeed) state.users = state.users.filter(user => user.role !== 'admin');
     if (state.users.some(user => user.email === email)) throw new HttpError(400, 'O e-mail do administrador coincide com um usuário de demonstração.');
     state.users.unshift(admin);
@@ -92,20 +96,46 @@ export class Repository {
   read(): Snapshot {
     const row = this.db.prepare('SELECT data, revision FROM app_state WHERE id = 1').get() as { data: string; revision: number };
     const state = JSON.parse(row.data) as AppState;
-    return { state: deriveState({ ...state, demoDate: localDay(new Date(this.now())) }), revision: row.revision };
+    return { state: deriveState({ ...state, demoDate: localDay(new Date(this.now())), trackingSessions: state.trackingSessions ?? [], gpsDays: state.gpsDays ?? [] }), revision: row.revision };
   }
 
   mutate(operation: (snapshot: Snapshot) => { state: AppState; message: string }, expectedRevision?: number): Snapshot & { message: string } {
     return this.transaction(() => {
       const snapshot = this.read();
       if (expectedRevision !== undefined && snapshot.revision !== expectedRevision) throw new HttpError(409, 'Os dados foram atualizados. Recarregue antes de tentar novamente.');
-      const result = operation(snapshot);
-      if (result.state === snapshot.state) throw new HttpError(422, result.message);
+      const output = operation(snapshot);
+      if (output.state === snapshot.state) throw new HttpError(422, output.message);
+      const result = { ...output, state: closeUnavailableTracking(output.state, this.now()) };
       const revision = snapshot.revision + 1;
       this.db.prepare('UPDATE app_state SET data = ?, revision = ? WHERE id = 1').run(JSON.stringify(result.state), revision);
       this.revokeChangedUsers(snapshot.state, result.state);
       return { ...result, revision };
     });
+  }
+
+  /** GPS state and point receipts commit together, including duplicate-only retries. */
+  mutateTracking<T extends { state: AppState }>(operation: (snapshot: Snapshot, receipts: PointReceipts) => T): T & { revision: number } {
+    return this.transaction(() => {
+      const snapshot = this.read();
+      const receipts: PointReceipts = {
+        hash: (sessionId, pointId) => (this.db.prepare('SELECT payload_hash FROM tracking_receipts WHERE session_id = ? AND point_id = ?')
+          .get(sessionId, pointId) as { payload_hash: string } | undefined)?.payload_hash,
+        remember: (sessionId, pointId, hash) => { this.db.prepare('INSERT INTO tracking_receipts(session_id, point_id, payload_hash) VALUES (?, ?, ?)').run(sessionId, pointId, hash); },
+        owner: (sessionId) => this.trackingOwner(sessionId),
+        bind: (sessionId, userId) => { this.db.prepare('INSERT INTO tracking_owners(session_id, user_id) VALUES (?, ?)').run(sessionId, userId); },
+      };
+      const result = operation(snapshot, receipts);
+      let revision = snapshot.revision;
+      if (result.state !== snapshot.state) {
+        revision++;
+        this.db.prepare('UPDATE app_state SET data = ?, revision = ? WHERE id = 1').run(JSON.stringify(result.state), revision);
+      }
+      return { ...result, revision };
+    });
+  }
+
+  trackingOwner(sessionId: string): string | undefined {
+    return (this.db.prepare('SELECT user_id FROM tracking_owners WHERE session_id = ?').get(sessionId) as { user_id: string } | undefined)?.user_id;
   }
 
   private revokeChangedUsers(before: AppState, after: AppState) {
